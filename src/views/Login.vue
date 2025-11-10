@@ -137,6 +137,11 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 // Reactive data
 const credentials = ref({
@@ -145,9 +150,11 @@ const credentials = ref({
 })
 const rememberMe = ref(false)
 const showPassword = ref(false)
-const isLoading = ref(false)
-const errorMessage = ref('')
 const toasts = ref([])
+
+// Use loading and error from auth store
+const isLoading = authStore.isLoading
+const errorMessage = authStore.error
 
 // Toast functions
 const showToast = (type, title, message) => {
@@ -179,47 +186,31 @@ const handleLogin = async () => {
     return
   }
 
-  isLoading.value = true
-  errorMessage.value = ''
-
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    // Use auth store with correct field names (user_code, user_password)
+    const result = await authStore.login(credentials.value.userId, credentials.value.password)
     
-    // Simple validation (in real app, this would be API call)
-    if (credentials.value.password === '123456') {
-      // Success - show success toast
-      if (rememberMe.value) {
-        localStorage.setItem('rememberedUser', JSON.stringify({
-          userId: credentials.value.userId
-        }))
-      }
-      
-      // Store user info (in real app, would come from API)
-      // Backend will determine user type based on userId format
-      const isStudent = /^\d+$/.test(credentials.value.userId) // If all digits, likely student
-      
-      localStorage.setItem('currentUser', JSON.stringify({
-        userId: credentials.value.userId,
-        userType: isStudent ? 'student' : 'teacher',
-        name: isStudent ? 'Nguyễn Văn A' : 'TS. Trần Thị B',
-        token: 'fake-jwt-token'
+    // Success - show success toast
+    if (rememberMe.value) {
+      localStorage.setItem('rememberedUser', JSON.stringify({
+        userId: credentials.value.userId
       }))
-      
-      // Show success toast
-      showToast('success', 'Đăng nhập thành công!', `Chào mừng ${credentials.value.userId} đến với StudyHub`)
-      
-      console.log('User logged in:', {
-        userId: credentials.value.userId,
-        detectedType: isStudent ? 'student' : 'teacher'
-      })
-    } else {
-      showToast('error', 'Đăng nhập thất bại', 'Thông tin tài khoản hoặc mật khẩu không chính xác')
     }
+    
+    // Show success toast
+    showToast('success', 'Đăng nhập thành công!', `Chào mừng ${result.user.name} đến với StudyHub`)
+    
+    console.log('User logged in:', result.user)
+    
+    // Redirect based on role after a short delay
+    setTimeout(() => {
+      const dashboardRoute = authStore.getDashboardRoute()
+      router.push(dashboardRoute)
+    }, 1000)
+    
   } catch (error) {
-    showToast('error', 'Lỗi hệ thống', 'Có lỗi xảy ra, vui lòng thử lại sau')
-  } finally {
-    isLoading.value = false
+    console.error('Login error:', error)
+    showToast('error', 'Đăng nhập thất bại', error.message || 'Thông tin tài khoản hoặc mật khẩu không chính xác')
   }
 }
 </script>

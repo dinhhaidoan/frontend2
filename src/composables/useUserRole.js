@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 // Role types
 export const ROLES = {
@@ -16,40 +17,43 @@ export const ROLE_NAMES = {
   [ROLES.ADMIN]: '👨‍💻 Admin'
 }
 
-// Current user role (for demo purposes, starts with admin to test admin features)
-const currentRole = ref(ROLES.STAFF)
-
 // Composable for user role management
 export function useUserRole() {
+  const authStore = useAuthStore()
   
-  // Get current role
-  const getCurrentRole = () => currentRole.value
+  // Get current role from auth store
+  const getCurrentRole = () => authStore.getUserRole() || ROLES.STUDENT
   
-  // Set current role
+  // Set current role (for demo switching purposes only)
   const setCurrentRole = (role) => {
     if (Object.values(ROLES).includes(role)) {
-      currentRole.value = role
+      // This would typically not be allowed in a real app
+      // Role should be determined by the backend/authentication
+      console.warn('Role switching is for demo purposes only')
     }
   }
   
   // Check if user has specific role
-  const hasRole = (role) => currentRole.value === role
+  const hasRole = (role) => getCurrentRole() === role
   
   // Get role display name
-  const getCurrentRoleName = computed(() => ROLE_NAMES[currentRole.value])
+  const getCurrentRoleName = computed(() => ROLE_NAMES[getCurrentRole()])
+  
+  // Current role reactive reference
+  const currentRole = computed(() => getCurrentRole())
   
   // Check permissions
-  const isStudent = computed(() => currentRole.value === ROLES.STUDENT)
-  const isTeacher = computed(() => currentRole.value === ROLES.TEACHER)
-  const isStaff = computed(() => currentRole.value === ROLES.STAFF)
-  const isAdmin = computed(() => currentRole.value === ROLES.ADMIN)
+  const isStudent = computed(() => getCurrentRole() === ROLES.STUDENT)
+  const isTeacher = computed(() => getCurrentRole() === ROLES.TEACHER)
+  const isStaff = computed(() => getCurrentRole() === ROLES.STAFF)
+  const isAdmin = computed(() => getCurrentRole() === ROLES.ADMIN)
   
   // Available roles for switching (for demo)
   const availableRoles = computed(() => 
     Object.entries(ROLE_NAMES).map(([key, name]) => ({
       key,
       name,
-      active: key === currentRole.value
+      active: key === getCurrentRole()
     }))
   )
   

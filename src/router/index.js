@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 // Simple fallback component for pages without dedicated components
 const Fallback = {
@@ -11,15 +12,25 @@ const Fallback = {
 
 // All routes use the Default layout as wrapper, with page content as dynamic component
 const routes = [
+  // Login route (STANDALONE - NO LAYOUT)
+  { 
+    path: '/login', 
+    name: 'login', 
+    component: () => import('../views/Login.vue'),
+    meta: { 
+      title: 'Đăng nhập hệ thống', 
+      subtitle: 'Đăng nhập để truy cập StudyHub',
+      requiresGuest: true
+    }
+  },
   { 
     path: '/', 
     component: () => import('../views/Deafault.vue'),
+    meta: { requiresAuth: true },
     children: [
       { 
         path: '', 
-        redirect: (to) => {
-          return '/dashboard'
-        }
+        redirect: '/login'
       },
       { path: 'dashboard', name: 'dashboard', component: () => import('../components/Dashboard-AD/Overview.vue').catch(() => Fallback) },
       { path: 'settings', name: 'settings', component: () => import('../views/share/Setting.vue').catch(() => Fallback) },
@@ -175,7 +186,6 @@ const routes = [
       { path: 'notes/create', name: 'notes-create', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'create', title: 'Tạo ghi chú mới' } },
       { path: 'notes/:id', name: 'notes-view', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'view', title: 'Xem ghi chú' } },
       { path: 'notes/:id/edit', name: 'notes-edit', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'edit', title: 'Chỉnh sửa ghi chú' } },
-      { path: 'login', name: 'login', component: () => import('../views/Login.vue').catch(() => Fallback), meta: { title: 'Đăng nhập hệ thống', subtitle: 'Đăng nhập để truy cập StudyHub' } },
       { path: 'schedule-students', name: 'schedule-students', component: () => import('../pages/Schedule-Students/Schedule.vue').catch(() => Fallback), meta: { title: 'Lịch học & lịch thi', subtitle: 'Xem lịch học và lịch thi cá nhân' } },
 
 
@@ -302,8 +312,11 @@ const routes = [
   }
 ]
 
+// Find the main route (the one with children)
+const mainRoute = routes.find(route => route.children)
+
 // Code Environment route
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'code-environment', 
   name: 'code-environment', 
   component: () => import('../pages/CodeEnviroment/CodeEnviroment.vue').catch(() => Fallback),
@@ -315,7 +328,7 @@ routes[0].children.push({
 })
 
 // Teacher Schedule route (for giảng viên - xem lịch giảng dạy/coi thi)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'teacher-schedule', 
   name: 'teacher-schedule', 
   component: () => import('../pages/Schedule-Teacher/Schedule.vue').catch(() => Fallback),
@@ -327,7 +340,7 @@ routes[0].children.push({
 })
 
 // Teacher Dashboard (giảng viên)
-routes[0].children.push({
+mainRoute.children.push({
   path: 'teacher-dashboard',
   name: 'teacher-dashboard',
   component: () => import('../pages/Dashboard-Teacher/Dashboard.vue').catch(() => Fallback),
@@ -339,7 +352,7 @@ routes[0].children.push({
 })
 
 // MyClass route (for giảng viên - quản lý lớp học phụ trách)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'my-classes', 
   name: 'my-classes', 
   component: () => import('../pages/MyClass/MyClass.vue').catch(() => Fallback),
@@ -351,7 +364,7 @@ routes[0].children.push({
 })
 
 // MyClass route for students (sinh viên - xem lớp học đang tham gia)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'student-classes', 
   name: 'student-classes', 
   component: () => import('../pages/MyClass-Students/MyClassStudents.vue').catch(() => Fallback),
@@ -363,7 +376,7 @@ routes[0].children.push({
 })
 
 // Lessons route (for giảng viên - quản lý bài học, video, tài liệu)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'lesson', 
   name: 'lesson', 
   component: () => import('../pages/Lessions/Lessons.vue').catch(() => Fallback),
@@ -375,7 +388,7 @@ routes[0].children.push({
 })
 
 // Student Lessons route (for sinh viên - xem bài học, video, tài liệu)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'student-lessons', 
   name: 'student-lessons', 
   component: () => import('../pages/Lessions-Students/LessonsStudents.vue').catch(() => Fallback),
@@ -387,7 +400,7 @@ routes[0].children.push({
 })
 
 // Student Assignments route (for sinh viên - làm bài tập, kiểm tra)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'student-assignments', 
   name: 'student-assignments', 
   component: () => import('../pages/LessonDetails-Students/LessonDetailsStudents.vue').catch(() => Fallback),
@@ -399,7 +412,7 @@ routes[0].children.push({
 })
 
 // AI Students route (for sinh viên - AI học tập với chat, gợi ý, phân tích)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'ai-students', 
   name: 'ai-students', 
   component: () => import('../pages/AI-Students/AIStudents.vue').catch(() => Fallback),
@@ -411,7 +424,7 @@ routes[0].children.push({
 })
 
 // LessonDetails route (for giảng viên - quản lý bài tập, chấm điểm)
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'lesson-details', 
   name: 'lesson-details', 
   component: () => import('../pages/LessionDetails/LessonDetails.vue').catch(() => Fallback),
@@ -431,24 +444,51 @@ const ids = [
 ]
 
 // Map internal-messages and admin-messages to the main messages route
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'internal-messages', 
   redirect: '/messages'
 })
 
-routes[0].children.push({ 
+mainRoute.children.push({ 
   path: 'admin-messages', 
   redirect: '/messages'
 })
 
 // Add these as children of the Default layout
 ids.forEach(id => {
-  routes[0].children.push({ path: id, name: id, component: Fallback })
+  mainRoute.children.push({ path: id, name: id, component: Fallback })
 })
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// Simple navigation guard for authentication
+router.beforeEach((to, from, next) => {
+  console.log('Router guard - navigating to:', to.path, 'from:', from.path)
+  
+  // ALWAYS clear localStorage when going to login
+  if (to.path === '/login') {
+    console.log('Going to login - clearing all localStorage')
+    localStorage.clear() // Clear everything
+    return next()
+  }
+  
+  // For root, redirect to login
+  if (to.path === '/' || to.path === '') {
+    console.log('Root path, redirecting to login')
+    return next('/login')
+  }
+  
+  // For all other routes, check authentication
+  const token = localStorage.getItem('auth_token')
+  if (!token) {
+    console.log('No token found, redirecting to login')
+    return next('/login')
+  }
+  
+  next()
 })
 
 export default router

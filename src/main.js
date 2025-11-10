@@ -8,7 +8,11 @@ import App from './App.vue'
 import router from './router'
 
 const pinia = createPinia()
-const i18n = createI18n()
+const i18n = createI18n({
+  legacy: false, // Use Composition API mode
+  locale: 'vi',
+  fallbackLocale: 'en'
+})
 const app = createApp(App)
 app.use(pinia)
 app.use(i18n)

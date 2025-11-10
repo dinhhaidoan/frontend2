@@ -111,7 +111,7 @@
             </div>
             
             <div class="menu-section logout-section">
-              <a href="#" class="menu-item logout-item" data-item="logout">
+              <a href="#" class="menu-item logout-item" @click="handleMenuClick('logout')" data-item="logout">
                 <div class="menu-icon logout-icon">
                   <i class="fas fa-sign-out-alt"></i>
                 </div>
@@ -127,15 +127,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
-// Sample user data
-const userName = ref('Hồ Thị Ngọc Huyền')
-const userRole = ref('student')
-const userEmail = ref('dinhhaido​an1810@gmail.com')
-const userClass = ref('SV001')
-const userAvatar = ref('https://i.pravatar.cc/150?img=45')
+const router = useRouter()
+const authStore = useAuthStore()
+
+// User data from auth store
+const user = computed(() => authStore.user)
+const userName = computed(() => user.value?.name || 'Người dùng')
+const userRole = computed(() => {
+  const role = user.value?.role
+  const roleNames = {
+    'admin': '👨‍💻 Admin',
+    'staff': '🧑‍💼 Giáo vụ khoa', 
+    'teacher': '👨‍🏫 Giảng viên',
+    'student': '🧑‍🎓 Sinh viên'
+  }
+  return roleNames[role] || '🔹 Người dùng'
+})
+const userEmail = computed(() => user.value?.email || '')
+const userClass = computed(() => user.value?.user_code || '')
+const userAvatar = computed(() => user.value?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName.value)}&background=667eea&color=fff`)
 
 // State management
 const showDropdown = ref(false)
@@ -186,6 +201,30 @@ const changeLanguage = (lang) => {
     showDropdown.value = false
     document.body.style.overflow = ''
   }, 300)
+}
+
+// Logout function
+const handleLogout = () => {
+  authStore.logout()
+  closeDropdown()
+  router.push('/login')
+}
+
+// Handle menu item clicks
+const handleMenuClick = (action) => {
+  closeDropdown()
+  
+  switch (action) {
+    case 'profile':
+      // Navigate to profile page
+      break
+    case 'settings':
+      router.push('/settings')
+      break
+    case 'logout':
+      handleLogout()
+      break
+  }
 }
 
 // Keyboard navigation
