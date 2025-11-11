@@ -40,6 +40,7 @@ export function useAuth() {
 
   // Load user from localStorage
   const loadUserFromStorage = () => {
+    isLoading.value = true
     try {
       const savedToken = localStorage.getItem('auth_token')
       const savedUser = localStorage.getItem('auth_user')
@@ -47,11 +48,14 @@ export function useAuth() {
       if (savedToken && savedUser) {
         token.value = savedToken
         user.value = JSON.parse(savedUser)
+        console.log('Loaded user from storage:', user.value, 'Role:', getUserRole())
         return true
       }
     } catch (error) {
       console.error('Error loading user from storage:', error)
       clearAuth()
+    } finally {
+      isLoading.value = false
     }
     return false
   }

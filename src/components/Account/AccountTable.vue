@@ -43,7 +43,7 @@
               <i class="fas fa-sort" :class="getSortIcon('role')"></i>
             </th>
             <th @click="$emit('sort', 'department')" class="sortable">
-              Khoa/Phòng ban
+              Khoa / Phòng
               <i class="fas fa-sort" :class="getSortIcon('department')"></i>
             </th>
             <th @click="$emit('sort', 'status')" class="sortable">
@@ -91,7 +91,7 @@
                 {{ getRoleLabel(account.role) }}
               </span>
             </td>
-            <td class="department-cell">{{ account.department }}</td>
+            <td class="department-cell">{{ account.department || 'CNTT' }}</td>
             <td class="status-cell">
               <span class="status-badge" :class="account.status">
                 <i :class="getStatusIcon(account.status)"></i>
@@ -297,7 +297,12 @@ const getStatusIcon = (status) => {
 }
 
 const formatDate = (date) => {
-  return new Date(date).toLocaleString('vi-VN')
+  if (!date) return 'Chưa đăng nhập'
+  try {
+    return new Date(date).toLocaleString('vi-VN')
+  } catch (e) {
+    return 'Chưa đăng nhập'
+  }
 }
 </script>
 

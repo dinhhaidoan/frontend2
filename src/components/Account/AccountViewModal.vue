@@ -32,21 +32,7 @@
               <div v-else class="avatar-placeholder">
                 {{ getInitials(account.name) }}
               </div>
-              <div class="avatar-status" :class="account.status">
-                <svg v-if="account.status === 'active'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M9 12l2 2 4-4"/>
-                  <circle cx="12" cy="12" r="10"/>
-                </svg>
-                <svg v-else-if="account.status === 'inactive'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12,6 12,12 16,14"/>
-                </svg>
-              </div>
+              
             </div>
           </div>
           <div class="profile-info">
@@ -210,61 +196,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Activity Tab -->
-            <div v-if="activeTab === 'activity'" class="tab-panel">
-              <div class="info-grid">
-                <div class="info-card">
-                  <div class="card-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <circle cx="12" cy="12" r="10"/>
-                      <polyline points="12,6 12,12 16,14"/>
-                    </svg>
-                    <h4>Lịch sử hoạt động</h4>
-                  </div>
-                  <div class="info-items">
-                    <div class="info-item">
-                      <div class="item-icon activity">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>
-                        </svg>
-                      </div>
-                      <div class="item-content">
-                        <span class="label">Đăng nhập cuối cùng</span>
-                        <span class="value">{{ formatDate(account.lastLogin) }}</span>
-                      </div>
-                    </div>
-                    <div class="info-item">
-                      <div class="item-icon created">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14 2 14 8 20 8"/>
-                          <line x1="16" y1="13" x2="8" y2="13"/>
-                          <line x1="16" y1="17" x2="8" y2="17"/>
-                          <polyline points="10 9 9 9 8 9"/>
-                        </svg>
-                      </div>
-                      <div class="item-content">
-                        <span class="label">Ngày tạo tài khoản</span>
-                        <span class="value">{{ formatDate(account.createdAt || account.lastLogin) }}</span>
-                      </div>
-                    </div>
-                    <div class="info-item">
-                      <div class="item-icon updated">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <polyline points="23 6 13.5 15.5 8.5 10.5"/>
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                        </svg>
-                      </div>
-                      <div class="item-content">
-                        <span class="label">Cập nhật cuối cùng</span>
-                        <span class="value">{{ formatDate(account.updatedAt || account.lastLogin) }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -327,11 +258,6 @@ const tabs = [
     id: 'role',
     label: 'Vai trò & Quyền hạn',
     icon: 'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'
-  },
-  {
-    id: 'activity',
-    label: 'Hoạt động',
-    icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'
   }
 ]
 
@@ -378,7 +304,12 @@ const getDepartmentLabel = (department) => {
 }
 
 const formatDate = (date) => {
-  return date ? new Date(date).toLocaleString('vi-VN') : 'Chưa có'
+  if (!date) return 'Chưa đăng nhập'
+  try {
+    return new Date(date).toLocaleString('vi-VN')
+  } catch (e) {
+    return 'Chưa đăng nhập'
+  }
 }
 </script>
 

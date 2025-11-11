@@ -7,28 +7,14 @@
           <h1>Quản lý tài khoản</h1>
           <p>Quản lý người dùng, phân quyền và trạng thái tài khoản</p>
         </div>
-        <div class="header-actions">
-          <button @click="showImportModal = true" class="btn-import">
-            <i class="fas fa-upload"></i>
-            Import Excel
-          </button>
-          <button @click="showCreateModal = true" class="btn-primary">
-            <i class="fas fa-user-plus"></i>
-            Tạo tài khoản mới
-          </button>
-          <button @click="exportData" class="btn-secondary">
-            <i class="fas fa-download"></i>
-            Xuất dữ liệu
-          </button>
-        </div>
       </div>
     </div>
 
     <!-- Statistics Section -->
     <AccountStats :stats="stats" />
 
-    <!-- Filters and Search -->
-    <AccountFilters 
+    <!-- Filters -->
+    <AccountFilters
       v-model="filters"
       @reset="resetFilters"
     />
@@ -43,6 +29,7 @@
       :itemsPerPage="itemsPerPage"
       :sortField="sortField"
       :sortDirection="sortDirection"
+      :totalItems="filteredAccounts.length"
       @update:selectedAccounts="selectedAccounts = $event"
       @update:itemsPerPage="itemsPerPage = $event"
       @update:currentPage="currentPage = $event"
@@ -63,13 +50,14 @@
       @bulk-role-change="handleBulkRoleChange"
       @bulk-department-change="handleBulkDepartmentChange"
       @bulk-delete="handleBulkDelete"
-      @bulk-export="exportData"
+      @bulk-export="exportFilteredData"
     />
 
     <!-- Create/Edit Account Modal -->
     <AccountModal 
       :show="showCreateModal || showEditModal"
       :account="editingAccount"
+      :saving="usersUpdating"
       @close="closeModals"
       @save="saveAccount"
     />
@@ -227,10 +215,18 @@
     </Transition>
 
   </div>
+
+  <!-- Loading overlay when fetching users -->
+  <div v-if="usersLoading" class="page-loading-overlay">
+    <div class="loader">
+      <i class="fas fa-spinner fa-spin fa-2x"></i>
+      <p>Đang tải danh sách người dùng...</p>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import AccountStats from '@/components/Account/AccountStats.vue'
 import AccountFilters from '@/components/Account/AccountFilters.vue'
@@ -238,13 +234,13 @@ import AccountTable from '@/components/Account/AccountTable.vue'
 import BulkActions from '@/components/Account/BulkActions.vue'
 import AccountModal from '@/components/Account/AccountModal.vue'
 import AccountViewModal from '@/components/Account/AccountViewModal.vue'
+import { useUsers } from '@/hooks/useUsers'
+import { useToast } from '@/composables/useToast'
 
-// Reactive data
+// Reactive data: only role + status
 const filters = ref({
-  search: '',
   role: '',
-  status: '',
-  department: ''
+  status: ''
 })
 const sortField = ref('name')
 const sortDirection = ref('asc')
@@ -274,67 +270,8 @@ const accountToDelete = ref(null)
 const updateAccountModalVisible = ref(false)
 const accountToUpdate = ref(null)
 
-// Sample data - in real app, this would come from API
-const accounts = ref([
-  {
-    id: 1,
-    name: 'Nguyễn Văn An',
-    userId: 'SV001',
-    email: 'nva@student.edu.vn',
-    role: 'student',
-    department: 'cntt',
-    status: 'active',
-    lastLogin: new Date('2024-09-29T10:30:00'),
-    avatar: null
-  },
-  {
-    id: 2,
-    name: 'Trần Thị Bình',
-    userId: 'GV001',
-    email: 'ttb@teacher.edu.vn',
-    role: 'teacher',
-    department: 'cntt',
-    status: 'active',
-    lastLogin: new Date('2024-09-29T14:20:00'),
-    avatar: null
-  },
-  {
-    id: 3,
-    name: 'Lê Minh Cường',
-    userId: 'GV002',
-    email: 'lmc@teacher.edu.vn',
-    role: 'teacher',
-    department: 'dtvt',
-    status: 'inactive',
-    lastLogin: new Date('2024-09-25T09:15:00'),
-    avatar: null
-  },
-  {
-    id: 4,
-    name: 'Phạm Thị Dung',
-    userId: 'GV003',
-    email: 'ptd@staff.edu.vn',
-    role: 'staff',
-    department: 'cntt',
-    status: 'active',
-    lastLogin: new Date('2024-09-29T16:45:00'),
-    avatar: null
-  },
-  {
-    id: 5,
-    name: 'Hoàng Văn Em',
-    userId: 'AD001',
-    email: 'hve@admin.edu.vn',
-    role: 'admin',
-    department: '',
-    status: 'active',
-    lastLogin: new Date('2024-09-29T18:00:00'),
-    avatar: null
-  }
-])
-
-
-
+// Accounts loaded from backend
+const accounts = ref([])
 // Stats
 const stats = computed(() => ({
   students: accounts.value.filter(a => a.role === 'student').length,
@@ -343,19 +280,14 @@ const stats = computed(() => ({
   active: accounts.value.filter(a => a.status === 'active').length
 }))
 
-// Filtered and sorted accounts
+// Filter statistics (role + status only)
+const hasActiveFilters = computed(() => {
+  return !!(filters.value.role || filters.value.status)
+})
+
+// Filtered and sorted accounts (role + status only)
 const filteredAccounts = computed(() => {
   let filtered = accounts.value
-
-  // Search filter
-  if (filters.value.search) {
-    const query = filters.value.search.toLowerCase()
-    filtered = filtered.filter(account => 
-      account.name.toLowerCase().includes(query) ||
-      account.email.toLowerCase().includes(query) ||
-      account.userId.toLowerCase().includes(query)
-    )
-  }
 
   // Role filter
   if (filters.value.role) {
@@ -367,17 +299,12 @@ const filteredAccounts = computed(() => {
     filtered = filtered.filter(account => account.status === filters.value.status)
   }
 
-  // Department filter
-  if (filters.value.department) {
-    filtered = filtered.filter(account => account.department === filters.value.department)
-  }
-
   // Sort
   filtered.sort((a, b) => {
     let aVal = a[sortField.value]
     let bVal = b[sortField.value]
     
-    if (sortField.value === 'lastLogin') {
+    if (sortField.value === 'lastLogin' || sortField.value === 'createdAt') {
       aVal = new Date(aVal)
       bVal = new Date(bVal)
     }
@@ -423,12 +350,7 @@ const visiblePages = computed(() => {
 
 // Methods
 const resetFilters = () => {
-  filters.value = {
-    search: '',
-    role: '',
-    status: '',
-    department: ''
-  }
+  filters.value = { role: '', status: '' }
   currentPage.value = 1
 }
 
@@ -451,10 +373,43 @@ const editAccount = (account) => {
   showEditModal.value = true
 }
 
-const toggleAccountStatus = (account) => {
+const toggleAccountStatus = async (account) => {
+  // Toggle active/inactive by calling backend and refreshing list
   const accountIndex = accounts.value.findIndex(a => a.id === account.id)
-  if (accountIndex > -1) {
-    accounts.value[accountIndex].status = accounts.value[accountIndex].status === 'active' ? 'inactive' : 'active'
+  if (accountIndex === -1) return
+
+  const currentStatus = accounts.value[accountIndex].status === 'active'
+  const desiredStatus = !currentStatus
+
+  const token = localStorage.getItem('auth_token')
+
+  try {
+    // Backend expects is_active inside a user object
+    const result = await updateUser(accounts.value[accountIndex].userId, { 
+      user: { is_active: desiredStatus ? 1 : 0 } 
+    }, token)
+
+    // Refresh from backend
+    await loadAccounts(false)
+
+    // Find updated record from fresh data
+    const updated = accounts.value.find(a => a.userId === accounts.value[accountIndex].userId)
+
+    if (updated) {
+      const nowActive = updated.status === 'active'
+      if (nowActive === desiredStatus) {
+        success(
+          `Tài khoản ${updated.name} đã được ${desiredStatus ? 'kích hoạt' : 'tạm khóa'}`,
+          desiredStatus ? 'Kích hoạt' : 'Tạm khóa'
+        )
+        return
+      }
+    }
+
+    // If we reach here, backend did not persist the desired change
+    warning('Backend đã nhận request nhưng trạng thái chưa thay đổi. Vui lòng kiểm tra lại.', 'Cảnh báo')
+  } catch (err) {
+    error(err.message || 'Không thể cập nhật trạng thái tài khoản', 'Lỗi')
   }
 }
 
@@ -463,15 +418,30 @@ const deleteAccount = (account) => {
   deleteAccountModalVisible.value = true
 }
 
-const confirmDeleteAccount = () => {
+const confirmDeleteAccount = async () => {
   if (accountToDelete.value) {
-    const index = accounts.value.findIndex(a => a.id === accountToDelete.value.id)
-    if (index > -1) {
-      accounts.value.splice(index, 1)
+    const token = localStorage.getItem('auth_token')
+    
+    try {
+      // Call backend to delete user
+      await deleteUser(accountToDelete.value.userId, token)
+      
+      // Refresh from backend to get updated list
+      await loadAccounts(false)
+      
+      // Remove from selection if present
+      selectedAccounts.value = selectedAccounts.value.filter(id => id !== accountToDelete.value.id)
+      
+      success(
+        `Tài khoản ${accountToDelete.value.name} đã được xóa thành công`,
+        'Xóa thành công'
+      )
+    } catch (err) {
+      error(
+        err.message || 'Không thể xóa tài khoản. Vui lòng thử lại.',
+        'Lỗi xóa tài khoản'
+      )
     }
-    // remove from selection if present
-    selectedAccounts.value = selectedAccounts.value.filter(id => id !== accountToDelete.value.id)
-    alert(`Đã xóa tài khoản ${accountToDelete.value.name}`)
   }
   closeDeleteModal()
 }
@@ -518,13 +488,73 @@ const saveAccount = (accountData) => {
   }
 }
 
-const confirmUpdateAccount = () => {
-  if (accountToUpdate.value && editingAccount.value) {
-    const index = accounts.value.findIndex(a => a.id === editingAccount.value.id)
-    if (index > -1) {
-      accounts.value[index] = { ...accounts.value[index], ...accountToUpdate.value }
-      alert(`Đã cập nhật tài khoản ${accountToUpdate.value.name}`)
+const confirmUpdateAccount = async () => {
+  if (accountToUpdate.value) {
+    const index = accounts.value.findIndex(a => a.id === accountToUpdate.value.id)
+    
+  if (index > -1) {
+      // Prepare payload for backend - match the format that works in Postman
+      const payload = {
+        // Update User table fields  
+        user_email: accountToUpdate.value.email,
+        user_phone: accountToUpdate.value.phone,
+        // Update profile table in nested format
+        profile: {}
+      }
+
+      // Also include a nested `user` object in case backend expects it
+      payload.user = {
+        user_email: accountToUpdate.value.email,
+        user_phone: accountToUpdate.value.phone
+      }
+
+      // Add role-specific profile data
+      if (accountToUpdate.value.role === 'student') {
+        payload.profile.student_name = accountToUpdate.value.name
+      } else if (accountToUpdate.value.role === 'teacher') {
+        payload.profile.teacher_name = accountToUpdate.value.name
+      } else if (accountToUpdate.value.role === 'staff') {
+        payload.profile.staff_name = accountToUpdate.value.name
+      } else if (accountToUpdate.value.role === 'admin') {
+        payload.profile.admin_name = accountToUpdate.value.name
+      }
+
+      
+
+      const token = localStorage.getItem('auth_token')
+      
+      // Call backend to update user - use user_code as identifier
+      try {
+        const result = await updateUser(accountToUpdate.value.userId, payload, token)
+        
+        // Force refresh from backend to see if data was actually saved
+        await loadAccounts(false)
+        
+        // Check if the update actually worked by comparing fresh data
+        const updatedAccount = accounts.value.find(a => a.userId === accountToUpdate.value.userId)
+        
+        if (updatedAccount && updatedAccount.email === payload.user_email) {
+          success(
+            `Tài khoản ${accountToUpdate.value.name} đã được cập nhật thành công`,
+            'Cập nhật thành công'
+          )
+        } else {
+          warning(
+            'Backend đã nhận request nhưng có thể chưa lưu vào database. Vui lòng kiểm tra lại.',
+            'Cảnh báo'
+          )
+        }
+      } catch (err) {
+        error(
+          err.message || 'Đã có lỗi xảy ra khi cập nhật thông tin tài khoản',
+          'Cập nhật thất bại'
+        )
+      }
+    } else {
+      warning('Không tìm thấy tài khoản để cập nhật', 'Lỗi')
     }
+  } else {
+    warning('Thông tin tài khoản không hợp lệ', 'Lỗi')
   }
   closeModals()
   closeUpdateModal()
@@ -573,9 +603,11 @@ const handleBulkDelete = (accountIds) => {
   selectedAccounts.value = []
 }
 
-const exportData = () => {
-  // Prepare data for export
-  const exportData = accounts.value.map(account => ({
+// Saved filters feature removed (only role + status supported)
+
+const exportFilteredData = () => {
+  // Export only filtered data instead of all data
+  const exportData = filteredAccounts.value.map(account => ({
     'Họ và tên': account.name,
     'Mã người dùng': account.userId,
     'Email': account.email,
@@ -604,53 +636,64 @@ const exportData = () => {
     { wch: 15 }  // Đăng nhập cuối
   ]
   
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách tài khoản')
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách tài khoản (đã lọc)')
   
-  // Download file
-  const fileName = `danh_sach_tai_khoan_${new Date().toISOString().split('T')[0]}.xlsx`
+  // Download file with filter info in name
+  const filterInfo = []
+  if (filters.value.role) filterInfo.push(filters.value.role)
+  if (filters.value.status) filterInfo.push(filters.value.status)
+
+  const filterSuffix = filterInfo.length > 0 ? `_${filterInfo.join('-')}` : ''
+  const fileName = `danh_sach_tai_khoan${filterSuffix}_${new Date().toISOString().split('T')[0]}.xlsx`
+  
   XLSX.writeFile(workbook, fileName)
+  
+  success(
+    `Đã xuất ${exportData.length} tài khoản với bộ lọc hiện tại`,
+    'Xuất dữ liệu thành công'
+  )
 }
 
 // Import functions
-const importAccounts = () => {
-  showImportModal.value = true
+const { accounts: hookAccounts, fetchUsers, updateUser, deleteUser, usersLoading, usersUpdating } = useUsers()
+const { success, error, warning } = useToast()
+
+const loadAccounts = async (showSuccessToast = true) => {
+  try {
+    const token = localStorage.getItem('auth_token')
+    await fetchUsers(token)
+    // hydrate local mapped accounts from hook
+    accounts.value = hookAccounts.value
+    
+    if (showSuccessToast && accounts.value.length > 0) {
+      success(
+        `Đã tải thành công ${accounts.value.length} tài khoản`,
+        'Tải dữ liệu thành công'
+      )
+    }
+  } catch (err) {
+    console.error('Error loading accounts via hook:', err)
+    error(
+      'Không thể tải danh sách tài khoản. Vui lòng thử lại.',
+      'Lỗi tải dữ liệu'
+    )
+  }
 }
 
-const closeImportModal = () => {
-  showImportModal.value = false
-  selectedFile.value = null
-  isDragOver.value = false
-}
+onMounted(() => {
+  loadAccounts()
+})
+  
+// Keep local accounts in sync with hookAccounts (live-sync)
+watch(hookAccounts, (val) => {
+  accounts.value = val
+}, { immediate: true })
 
-const downloadTemplate = () => {
-  // Create sample data for template
-  const templateData = [
-    ['Họ và tên', 'Mã người dùng', 'Email', 'Vai trò', 'Khoa/Bộ môn', 'Số điện thoại'],
-    ['Nguyễn Văn An', 'SV001', 'nva@student.edu.vn', 'student', 'cntt', '0123456789'],
-    ['Trần Thị Bình', 'GV001', 'ttb@teacher.edu.vn', 'teacher', 'cntt', '0987654321'],
-    ['Lê Minh Cường', 'GV002', 'lmc@teacher.edu.vn', 'teacher', 'dtvt', '0912345678'],
-    ['Phạm Thị Dung', 'NV001', 'ptd@staff.edu.vn', 'staff', 'cntt', '0901234567']
-  ]
-  
-  // Create workbook and worksheet
-  const workbook = XLSX.utils.book_new()
-  const worksheet = XLSX.utils.aoa_to_sheet(templateData)
-  
-  // Set column widths
-  worksheet['!cols'] = [
-    { wch: 20 }, // Họ và tên
-    { wch: 15 }, // Mã người dùng
-    { wch: 25 }, // Email
-    { wch: 10 }, // Vai trò
-    { wch: 15 }, // Khoa/Bộ môn
-    { wch: 15 }  // Số điện thoại
-  ]
-  
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Template')
-  
-  // Download file
-  XLSX.writeFile(workbook, 'mau_import_tai_khoan.xlsx')
-}
+// Watch for filter changes and reset pagination
+watch(filters, () => {
+  currentPage.value = 1
+}, { deep: true })
+ 
 
 const handleFileSelect = (event) => {
   const file = event.target.files[0]
@@ -921,6 +964,54 @@ const processImport = async () => {
 
 .btn-reset:hover {
   background: rgba(239, 68, 68, 0.15);
+}
+
+/* Filter Statistics */
+.filter-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(139, 92, 246, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.filter-results {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.filter-results i {
+  color: #3b82f6;
+  font-size: 16px;
+}
+
+.filter-results strong {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.filter-reduction {
+  color: #6b7280;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.filter-performance {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 /* Stats Grid */
@@ -1840,5 +1931,30 @@ const processImport = async () => {
   .account-table tbody tr:hover {
     background: rgba(59, 130, 246, 0.1);
   }
+}
+
+/* Loading overlay styles */
+.page-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loader {
+  text-align: center;
+  color: #3b82f6;
+}
+
+.loader p {
+  margin-top: 12px;
+  font-size: 16px;
+  color: #374151;
 }
 </style>

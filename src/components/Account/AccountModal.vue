@@ -22,29 +22,20 @@
           
           <div class="form-group">
             <label>Mã số</label>
-            <input v-model="formData.userId" type="text" />
+            <input v-model="formData.userId" type="text" :disabled="isEdit" />
+            <small v-if="isEdit" class="muted">Mã số không thể thay đổi sau khi tạo</small>
           </div>
           
           <div class="form-group">
             <label>Vai trò *</label>
-            <select v-model="formData.role" required>
+            <select v-model="formData.role" required :disabled="isEdit">
               <option value="">Chọn vai trò</option>
               <option value="student">Sinh viên</option>
               <option value="teacher">Giảng viên</option>
               <option value="staff">Giáo vụ</option>
               <option value="admin">Quản trị viên</option>
             </select>
-          </div>
-          
-          <div class="form-group">
-            <label>Khoa/Phòng ban</label>
-            <select v-model="formData.department">
-              <option value="">Chọn khoa/phòng ban</option>
-              <option value="cntt">Công nghệ thông tin</option>
-              <option value="dtvt">Điện tử viễn thông</option>
-              <option value="co-khi">Cơ khí</option>
-              <option value="kinh-te">Kinh tế</option>
-            </select>
+            <small v-if="isEdit" class="muted">Vai trò bị khóa — liên hệ quản trị nếu cần thay đổi</small>
           </div>
           
           <div class="form-group">
@@ -72,9 +63,10 @@
         </div>
         
         <div class="form-actions">
-          <button type="button" @click="$emit('close')" class="btn-secondary">Hủy</button>
-          <button type="submit" class="btn-primary">
-            {{ isEdit ? 'Cập nhật' : 'Tạo tài khoản' }}
+          <button type="button" @click="$emit('close')" class="btn-secondary" :disabled="props.saving">Hủy</button>
+          <button type="submit" class="btn-primary" :disabled="props.saving">
+            <i v-if="props.saving" class="fas fa-spinner fa-spin" style="margin-right:8px"></i>
+            {{ props.saving ? (isEdit ? 'Đang cập nhật...' : 'Đang tạo...') : (isEdit ? 'Cập nhật' : 'Tạo tài khoản') }}
           </button>
         </div>
       </form>
@@ -94,6 +86,10 @@ const props = defineProps({
   account: {
     type: Object,
     default: null
+  },
+  saving: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -110,7 +106,6 @@ const formData = reactive({
   email: '',
   userId: '',
   role: '',
-  department: '',
   phone: '',
   password: ''
 })

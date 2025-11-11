@@ -1,6 +1,15 @@
 <template>
   <nav class="sidebar-menu">
-    <div class="menu-list">
+    <!-- Loading state when auth is not loaded -->
+    <div v-if="!authStore.isAuthenticated() && authStore.isLoading" class="menu-loading">
+      <div class="loading-item" v-for="n in 6" :key="n">
+        <div class="loading-icon"></div>
+        <div class="loading-text"></div>
+      </div>
+    </div>
+    
+    <!-- Menu items -->
+    <div v-else class="menu-list">
       <div
         v-for="item in menuItems"
         :key="item.id"
@@ -25,12 +34,21 @@
         <div class="menu-glow"></div>
       </div>
     </div>
+    
+    <!-- Debug info (remove in production) -->
+    <div v-if="false" class="debug-info">
+      <small>
+        Role: {{ currentRole }} | Auth: {{ authStore.isAuthenticated() }} | 
+        User: {{ authStore.user?.role || 'none' }}
+      </small>
+    </div>
   </nav>
 </template>
 
 <script setup>
-import { ref, inject, watch, computed } from 'vue'
+import { ref, inject, watch, computed, onMounted } from 'vue'
 import { useUserRole } from '../../composables/useUserRole.js'
+import { useAuthStore } from '@/stores/auth'
 
 const activeItemId = ref('dashboard')
 
@@ -38,8 +56,9 @@ const activeItemId = ref('dashboard')
 const selectMenuItemHandler = inject('selectMenuItem', null)
 const providedActiveMenuId = inject('activeMenuId', ref('dashboard'))
 
-// Use role management
+// Use role management and auth store
 const { currentRole, isStudent, isTeacher, isStaff, isAdmin, ROLES } = useUserRole()
+const authStore = useAuthStore()
 
 // Watch for changes in provided active menu ID
 watch(providedActiveMenuId, (newValue) => {
@@ -265,7 +284,7 @@ const menuItemsByRole = {
       id: 'messages',
       label: 'Tin nhắn',
       icon: 'fas fa-comment',
-      badge: 2 // TODO: Get from API/store
+      badge: 2
     },
     {
       id: 'admin-notifications',
@@ -280,9 +299,31 @@ const menuItemsByRole = {
   ]
 }
 
-// Computed menu items based on current role
+// Computed menu items based on current role with loading state
 const menuItems = computed(() => {
-  return menuItemsByRole[currentRole.value] || menuItemsByRole[ROLES.STUDENT]
+  // If not authenticated, show loading or empty menu
+  if (!authStore.isAuthenticated()) {
+    return []
+  }
+  
+  const role = currentRole.value
+  console.log('Computing menu items for role:', role)
+  
+  const items = menuItemsByRole[role] || menuItemsByRole[ROLES.ADMIN]
+  console.log('Menu items:', items)
+  return items
+})
+
+// Watch for role changes
+watch(currentRole, (newRole, oldRole) => {
+  console.log('Role changed from', oldRole, 'to', newRole)
+}, { immediate: true })
+
+// Ensure auth is loaded on mount
+onMounted(() => {
+  if (!authStore.isAuthenticated()) {
+    authStore.loadUserFromStorage()
+  }
 })
 
 import { useRouter } from 'vue-router'
@@ -544,6 +585,58 @@ const selectMenuItem = (item) => {
   50% { 
     box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2);
   }
+}
+
+/* Loading State */
+.menu-loading {
+  padding: 16px;
+}
+
+.loading-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: rgba(243, 244, 246, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.loading-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(209, 213, 219, 0.6);
+}
+
+.loading-text {
+  flex: 1;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(209, 213, 219, 0.6);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Debug info */
+.debug-info {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  z-index: 9999;
 }
 
 /* Custom scrollbar */
