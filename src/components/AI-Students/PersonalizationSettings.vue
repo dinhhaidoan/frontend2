@@ -535,7 +535,6 @@ const tutorPersonalities = [
 
 const saveSettings = () => {
   // TODO: Save to API
-  console.log('Saving settings:', settings)
   showToast.value = true
   setTimeout(() => {
     showToast.value = false

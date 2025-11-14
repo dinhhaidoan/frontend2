@@ -23,6 +23,7 @@
                 @click="$emit('toggle-favorite', note)" 
                 class="action-btn favorite" 
                 :class="{ active: note.isFavorite }"
+                :aria-pressed="note.isFavorite"
                 title="Yêu thích"
               >
                 <i class="fas fa-heart"></i>
@@ -69,7 +70,7 @@
         <div class="note-info">
           <div class="info-item">
             <i class="fas fa-user"></i>
-            <span>Tác giả: <strong>{{ note.author }}</strong></span>
+            <span>Tác giả: <strong>{{ resolveAuthorName(note) }}</strong></span>
           </div>
           <div class="info-item">
             <i class="fas fa-calendar-plus"></i>
@@ -168,6 +169,8 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useUsers } from '@/hooks/useUsers'
 
 const props = defineProps({
   isVisible: {
@@ -301,6 +304,27 @@ const formatDate = (date) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// Auth display name fallback
+const authStore = useAuthStore()
+const { accounts: userAccounts } = useUsers()
+const authDisplayName = computed(() => {
+  const u = authStore.user || {}
+  return (
+    u.name || u.full_name || u.user_name || u.userId || u.user_code || u.username || u.displayName || 'Người dùng'
+  )
+})
+
+const resolveAuthorName = (note) => {
+  if (!note) return authDisplayName.value
+  if (note?.author && String(note.author).toLowerCase() !== 'user' && String(note.author).trim() !== '') return String(note.author)
+  const uid = note?.userId
+  if (uid !== null && uid !== undefined) {
+    const found = (userAccounts?.value || []).find(a => String(a.userId) === String(uid) || String(a.user_code) === String(uid) || String(a.id) === String(uid))
+    if (found && found.name) return found.name
+  }
+  return authDisplayName.value
 }
 
 const getWordCount = (content) => {
@@ -487,6 +511,8 @@ onUnmounted(() => {
 
 .modal-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background-color: #667eea !important;
   padding: 20px 32px !important;
   color: white !important;
   flex-shrink: 0 !important;
@@ -584,6 +610,17 @@ onUnmounted(() => {
 
 .action-btn.active {
   background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Make the heart icon red when the favorite button is active, only the icon color changes */
+.action-btn.favorite i {
+  color: rgba(255,255,255,0.95) !important;
+  transition: color 0.12s ease !important;
+}
+
+.action-btn.favorite.active i {
+  color: #ff5454 !important; /* bright red */
+  text-shadow: 0 1px 0 rgba(0,0,0,0.15) !important;
 }
 
 .close-btn {

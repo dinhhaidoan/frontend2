@@ -74,14 +74,6 @@
           Yêu thích
         </button>
         <button 
-          @click="setQuickFilter('recent')"
-          class="quick-filter-btn"
-          :class="{ active: isQuickFilterActive('recent') }"
-        >
-          <i class="fas fa-clock"></i>
-          Gần đây
-        </button>
-        <button 
           @click="setQuickFilter('archived')"
           class="quick-filter-btn"
           :class="{ active: isQuickFilterActive('archived') }"

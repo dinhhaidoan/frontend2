@@ -82,7 +82,7 @@ if (props.duration > 0) {
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  z-index: 9999;
+  z-index: 999999;
   border-left: 4px solid;
 }
 

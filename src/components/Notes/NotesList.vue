@@ -78,15 +78,15 @@
         
         <!-- Footer -->
         <div class="note-footer">
-          <div class="author-info">
-            <div class="author-avatar">
-              {{ note.author.charAt(0).toUpperCase() }}
+            <div class="author-info">
+              <div class="author-avatar">
+                {{ (resolveAuthorName(note) || '?').charAt ? (resolveAuthorName(note) || '?').charAt(0).toUpperCase() : '?' }}
+              </div>
+              <div class="author-details">
+                <span class="author-name">{{ resolveAuthorName(note) }}</span>
+                <span class="note-date">{{ formatRelativeDate(note.updatedAt) }}</span>
+              </div>
             </div>
-            <div class="author-details">
-              <span class="author-name">{{ note.author }}</span>
-              <span class="note-date">{{ formatRelativeDate(note.updatedAt) }}</span>
-            </div>
-          </div>
           
           <!-- Quick Actions -->
           <div class="quick-actions">
@@ -114,11 +114,11 @@
                   <i class="fas fa-eye"></i>
                   Xem chi tiết
                 </button>
-                <button @click="$emit('toggle-archive', note)" class="dropdown-item">
+                <button @click="handleToggleArchive(note)" class="dropdown-item">
                   <i class="fas fa-archive"></i>
                   {{ note.isArchived ? 'Bỏ lưu trữ' : 'Lưu trữ' }}
                 </button>
-                <button @click="$emit('delete', note)" class="dropdown-item danger">
+                <button @click="handleDelete(note)" class="dropdown-item danger">
                   <i class="fas fa-trash"></i>
                   Xóa
                 </button>
@@ -132,7 +132,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useUsers } from '@/hooks/useUsers'
 
 const props = defineProps({
   notes: {
@@ -154,6 +156,30 @@ const props = defineProps({
 })
 
 const activeDropdown = ref(null)
+
+// Auth store to get current user info (fallback when note.author is missing)
+const authStore = useAuthStore()
+const { accounts: userAccounts, fetchUsers } = useUsers()
+const currentUserName = computed(() => {
+  const u = authStore.user || {}
+  return (
+    u.name || u.full_name || u.user_name || u.userId || u.user_code || u.username || u.displayName || 'Người dùng'
+  )
+})
+
+// Resolve author name for a note: prefer explicit note.author, then lookup by userId in accounts, then auth user
+const resolveAuthorName = (note) => {
+  if (note?.author && String(note.author).toLowerCase() !== 'user' && String(note.author).trim() !== '') return String(note.author)
+
+  // Try to find in accounts by common id fields
+  const uid = note?.userId
+  if (uid !== null && uid !== undefined) {
+    const found = (userAccounts?.value || []).find(a => String(a.userId) === String(uid) || String(a.user_code) === String(uid) || String(a.id) === String(uid))
+    if (found && found.name) return found.name
+  }
+
+  return currentUserName.value
+}
 
 const emit = defineEmits([
   'update:selectedNotes',
@@ -179,6 +205,16 @@ const toggleSelection = (noteId) => {
 
 const handleNoteClick = (note) => {
   emit('view', note)
+}
+
+const handleToggleArchive = (note) => {
+  activeDropdown.value = null
+  emit('toggle-archive', note)
+}
+
+const handleDelete = (note) => {
+  activeDropdown.value = null
+  emit('delete', note)
 }
 
 const toggleDropdown = (noteId) => {
@@ -227,8 +263,10 @@ const truncateText = (text, maxLength) => {
 }
 
 const formatRelativeDate = (date) => {
+  if (!date) return 'chưa cập nhật'
   const now = new Date()
   const noteDate = new Date(date)
+  if (isNaN(noteDate)) return 'chưa cập nhật'
   const diffInHours = Math.floor((now - noteDate) / (1000 * 60 * 60))
   
   if (diffInHours < 1) return 'Vừa xong'

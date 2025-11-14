@@ -36,8 +36,6 @@ const verifyRoleWithBackend = async () => {
       // You can call a dedicated endpoint to verify user role
       // For now, trust the stored user data but log it
       const currentRole = authStore.getUserRole()
-      console.log('🔐 Role verification - Current role:', currentRole)
-      console.log('🔐 Role verification - User data:', authStore.user)
       
       verifiedRole.value = currentRole
       isRoleVerified.value = true
@@ -78,7 +76,6 @@ export function useUserRole() {
     }
     
     const role = authStore.getUserRole()
-    console.log('📋 Current role from auth store:', role)
     
     // If no role and not authenticated, default to student
     if (!role && !authStore.isAuthenticated()) {
@@ -106,7 +103,6 @@ export function useUserRole() {
   // Current role reactive reference - watch for user changes
   const currentRole = computed(() => {
     const role = getCurrentRole()
-    console.log('🎭 Computing current role:', role, 'Verified:', isRoleVerified.value)
     return role
   })
   
@@ -129,7 +125,6 @@ export function useUserRole() {
   watch(
     () => authStore.user,
     async (newUser) => {
-      console.log('👤 User changed in useUserRole:', newUser)
       if (newUser) {
         // Re-verify role when user changes
         await verifyRoleWithBackend()

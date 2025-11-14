@@ -467,12 +467,10 @@ export default {
     
     const viewSubject = (subject) => {
       // Navigate to subject detail or open subject modal
-      console.log('View subject:', subject)
     }
     
     const viewClass = (classItem) => {
       // Navigate to class detail or open class modal
-      console.log('View class:', classItem)
     }
     
     onMounted(() => {

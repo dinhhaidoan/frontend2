@@ -576,7 +576,6 @@ const getLinePath = (data) => {
 }
 
 const handleInsightAction = (action) => {
-  console.log('Action:', action)
   // TODO: Implement action handlers
 }
 </script>

@@ -48,7 +48,6 @@ export function useAuth() {
       if (savedToken && savedUser) {
         token.value = savedToken
         user.value = JSON.parse(savedUser)
-        console.log('Loaded user from storage:', user.value, 'Role:', getUserRole())
         return true
       }
     } catch (error) {

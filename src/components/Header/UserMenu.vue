@@ -127,16 +127,20 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useUsers } from '@/hooks/useUsers'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-// User data from auth store
-const user = computed(() => authStore.user)
+// Attempt to prefer fresh data from backend (useUsers) when available, fallback to auth store
+const { accounts, fetchUsers, usersLoading } = useUsers()
+const currentAccount = ref(null)
+
+const user = computed(() => currentAccount.value || authStore.user)
 const userName = computed(() => user.value?.name || 'Người dùng')
 const userRole = computed(() => {
   const role = user.value?.role
@@ -149,7 +153,7 @@ const userRole = computed(() => {
   return roleNames[role] || '🔹 Người dùng'
 })
 const userEmail = computed(() => user.value?.email || '')
-const userClass = computed(() => user.value?.user_code || '')
+const userClass = computed(() => user.value?.user_code || user.value?.userId || '')
 const userAvatar = computed(() => user.value?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName.value)}&background=667eea&color=fff`)
 
 // State management
@@ -236,11 +240,33 @@ const handleKeydown = (event) => {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  // Fetch latest user list and pick current user record when token is present
+  ;(async () => {
+    try {
+      if (authStore.token) {
+        await fetchUsers(authStore.token)
+        // Find matching user by user_code or userId
+        const code = authStore.user?.user_code || authStore.user?.userId || authStore.user?.userId
+        const found = accounts.value.find(a => a.userId === code || String(a.id) === String(authStore.user?.id))
+        if (found) currentAccount.value = found
+      }
+    } catch (err) {
+      console.error('Failed to fetch user data for UserMenu:', err)
+    }
+  })()
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
+})
+
+// React to accounts updates (in case fetchUsers completes after mount)
+watch(accounts, (newAccounts) => {
+  if (!newAccounts || !Array.isArray(newAccounts)) return
+  const code = authStore.user?.user_code || authStore.user?.userId
+  const found = newAccounts.find(a => a.userId === code || String(a.id) === String(authStore.user?.id))
+  if (found) currentAccount.value = found
 })
 </script>
 
@@ -256,6 +282,8 @@ onUnmounted(() => {
 
 /* Enhanced User Info Trigger */
 .user-info {
+  position: relative;
+  z-index: 99999; /* ensure user info sits above other header elements */
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -359,7 +387,7 @@ onUnmounted(() => {
     0 20px 25px -5px rgba(0, 0, 0, 0.1),
     0 10px 10px -5px rgba(0, 0, 0, 0.04),
     0 0 0 1px rgba(255, 255, 255, 0.1);
-  z-index: 9999;
+  z-index: 99999; /* raised to sit above other components */
   overflow: hidden;
 }
 

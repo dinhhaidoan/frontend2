@@ -24,7 +24,7 @@
             <input 
               type="text" 
               v-model="filters.search" 
-              placeholder="Tìm kiếm ghi chú, thẻ, nội dung..."
+              placeholder="Tìm theo #thẻ (ví dụ: #todo) — tìm theo tiêu đề đã tắt"
               class="search-input"
             />
             <button v-if="filters.search" @click="filters.search = ''" class="clear-search">
@@ -113,6 +113,7 @@
             >
               <i class="fas fa-sticky-note"></i>
               Tất cả
+              <span class="count">{{ stats.total }}</span>
             </button>
             <button 
               @click="setQuickFilter('favorites')" 
@@ -121,15 +122,9 @@
             >
               <i class="fas fa-heart"></i>
               Yêu thích
+              <span class="count">{{ stats.favorites }}</span>
             </button>
-            <button 
-              @click="setQuickFilter('recent')" 
-              :class="{ active: quickFilter === 'recent' }"
-              class="filter-btn"
-            >
-              <i class="fas fa-clock"></i>
-              Gần đây
-            </button>
+            <!-- Recent filter removed per request -->
             <button 
               @click="setQuickFilter('archived')" 
               :class="{ active: quickFilter === 'archived' }"
@@ -137,6 +132,7 @@
             >
               <i class="fas fa-archive"></i>
               Lưu trữ
+              <span class="count">{{ stats.archived }}</span>
             </button>
           </div>
         </div>
@@ -269,9 +265,22 @@
       :note="viewingNote"
       @close="closeViewModalWithRouter"
       @edit="editFromView"
-      @delete="deleteNote"
+      @delete="confirmDeleteNote"
       @toggle-favorite="toggleFavorite"
       @toggle-archive="toggleArchive"
+    />
+
+    <!-- Confirm Delete Dialog -->
+    <ConfirmDialog
+      v-model:show="showConfirmDelete"
+      type="danger"
+      title="Xác nhận xóa ghi chú"
+      :message="`Bạn có chắc chắn muốn xóa ghi chú &quot;${noteToDelete?.title}&quot;?`"
+      details="Hành động này không thể hoàn tác. Ghi chú sẽ bị xóa vĩnh viễn."
+      confirmText="Xóa ghi chú"
+      :loading="deletingNote"
+      @confirm="executeDeleteNote"
+      @cancel="cancelDeleteNote"
     />
   </div>
 </template>
@@ -282,6 +291,36 @@ import { useRoute, useRouter } from 'vue-router'
 import NotesList from '@/components/Notes/NotesList.vue'
 import NoteModal from '@/components/Notes/NoteModal.vue'
 import NoteViewModal from '@/components/Notes/NoteViewModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useToast } from '@/composables/useToast'
+import { useNotes } from '@/hooks/useNotes'
+import { formatRelativeTime } from '@/utils/formatters'
+import { CATEGORY_MAP } from '@/types/note'
+
+// Toast
+const { success, error, info } = useToast()
+
+// Notes hook
+const {
+  notes,
+  totalCount,
+  globalTotalCount,
+  isLoading,
+  currentPage,
+  totalPages,
+  fetchNotes,
+  fetchNoteById,
+  deleteNote: deleteNoteAPI,
+  toggleFavorite: toggleFavoriteAPI,
+  toggleArchive: toggleArchiveAPI,
+  bulkDeleteNotes,
+  search,
+  filterByCategory,
+  fetchGlobalCount,
+  fetchCategoriesSummary,
+  categoriesSummary,
+  resetFilters
+} = useNotes()
 
 // Router
 const route = useRoute()
@@ -306,7 +345,12 @@ const showViewModal = ref(false)
 const editingNote = ref(null)
 const viewingNote = ref(null)
 
-// Categories data
+// Confirm delete
+const showConfirmDelete = ref(false)
+const noteToDelete = ref(null)
+const deletingNote = ref(false)
+
+// Categories data - khớp với database
 const categories = [
   { value: '', label: 'Tất cả', icon: 'fas fa-sticky-note' },
   { value: 'study', label: 'Học tập', icon: 'fas fa-graduation-cap' },
@@ -316,221 +360,27 @@ const categories = [
   { value: 'personal', label: 'Cá nhân', icon: 'fas fa-user' }
 ]
 
-// Sample data - in real app, this would come from API
-const notes = ref([
-  {
-    id: 1,
-    title: 'Kế hoạch học tập học kỳ 1',
-    content: 'Lập kế hoạch chi tiết cho các môn học trong học kỳ 1, bao gồm thời gian biểu, mục tiêu và phương pháp học tập hiệu quả.\n\n## Mục tiêu chính\n- Đạt điểm trung bình >= 8.0\n- Hoàn thành tất cả đồ án đúng hạn\n- Tham gia ít nhất 2 hoạt động ngoại khóa\n\n## Kế hoạch chi tiết\n1. **Tuần 1-2**: Ôn tập kiến thức cũ\n2. **Tuần 3-4**: Học bài mới và làm bài tập\n3. **Tuần 5-6**: Chuẩn bị cho kỳ thi giữa kỳ',
-    category: 'study',
-    priority: 'high',
-    status: 'active',
-    isFavorite: true,
-    isArchived: false,
-    tags: ['học tập', 'kế hoạch', 'học kỳ'],
-    createdAt: new Date('2024-09-20T08:00:00'),
-    updatedAt: new Date('2024-09-25T14:30:00'),
-    author: 'Nguyễn Văn An'
-  },
-  {
-    id: 2,
-    title: 'Ý tưởng đồ án cuối kỳ',
-    content: 'Brainstorm các ý tưởng cho đồ án cuối kỳ môn Phát triển ứng dụng web. Cần tập trung vào tính thực tiễn và khả năng ứng dụng.\n\n### Ý tưởng 1: E-commerce Website\n- Xây dựng website bán hàng online\n- Sử dụng React/Vue.js frontend\n- Node.js + MongoDB backend\n- Tích hợp thanh toán online\n\n### Ý tưởng 2: Learning Management System\n- Hệ thống quản lý học tập trực tuyến\n- Chức năng upload bài giảng, nộp bài tập\n- Chat real-time giữa giáo viên và học sinh',
-    category: 'project',
-    priority: 'medium',
-    status: 'active',
-    isFavorite: false,
-    isArchived: false,
-    tags: ['đồ án', 'web development', 'ý tưởng'],
-    createdAt: new Date('2024-09-18T10:15:00'),
-    updatedAt: new Date('2024-09-24T16:45:00'),
-    author: 'Trần Thị Bình'
-  },
-  {
-    id: 3,
-    title: 'Tài liệu tham khảo JavaScript',
-    content: `Danh sách các tài liệu, khóa học và nguồn học JavaScript hữu ích. Bao gồm cả documentation và tutorial từ cơ bản đến nâng cao.
-
-## Documentation chính thức
-- [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-- [JavaScript.info](https://javascript.info/)
-
-## Khóa học online
-- Codecademy JavaScript Course
-- FreeCodeCamp JavaScript Algorithms
-- Udemy: The Complete JavaScript Course
-
-## Sách hay
-- "Eloquent JavaScript" by Marijn Haverbeke
-- "You Don't Know JS" series by Kyle Simpson
-- "JavaScript: The Good Parts" by Douglas Crockford`,
-    category: 'resource',
-    priority: 'low',
-    status: 'active',
-    isFavorite: true,
-    isArchived: false,
-    tags: ['javascript', 'tài liệu', 'học tập'],
-    createdAt: new Date('2024-09-15T09:30:00'),
-    updatedAt: new Date('2024-09-22T11:20:00'),
-    author: 'Lê Minh Cường'
-  },
-  {
-    id: 4,
-    title: 'Meeting notes - Nhóm dự án',
-    content: 'Ghi chú cuộc họp nhóm về phân chia công việc và timeline cho dự án. Cần follow up các task đã được assign.\n\n## Thành viên tham gia\n- Nguyễn Văn A (Team Leader)\n- Trần Thị B (Frontend Developer)\n- Lê Văn C (Backend Developer)\n- Phạm Thị D (Designer)\n\n## Nội dung họp\n1. **Tiến độ hiện tại**: 60% hoàn thành\n2. **Vấn đề gặp phải**: Database design cần review lại\n3. **Kế hoạch tuần tới**: \n   - A: Hoàn thiện API documentation\n   - B: Implement user authentication UI\n   - C: Fix database schema issues\n   - D: Create final mockups for admin panel',
-    category: 'meeting',
-    priority: 'high',
-    status: 'completed',
-    isFavorite: false,
-    isArchived: false,
-    tags: ['meeting', 'dự án', 'nhóm'],
-    createdAt: new Date('2024-09-10T14:00:00'),
-    updatedAt: new Date('2024-09-23T09:15:00'),
-    author: 'Phạm Thị Dung'
-  },
-  {
-    id: 5,
-    title: 'Cài đặt môi trường phát triển',
-    content: `Hướng dẫn cài đặt và cấu hình các công cụ cần thiết cho việc phát triển web.
-
-## Công cụ cần thiết
-### Code Editor
-- **Visual Studio Code** (khuyên dùng)
-- Extensions cần thiết:
-  - Vetur (Vue.js support)
-  - ES7+ React/Redux/React-Native snippets
-  - Prettier - Code formatter
-  - GitLens
-
-### Runtime Environment
-- **Node.js** (phiên bản LTS mới nhất)
-- **npm** hoặc **yarn** package manager
-
-### Database
-- **MongoDB** cho NoSQL
-- **PostgreSQL** cho SQL
-
-### Version Control
-- **Git** + **GitHub**
-- Tạo SSH key để push code dễ dàng`,
-    category: 'resource',
-    priority: 'medium',
-    status: 'active',
-    isFavorite: false,
-    isArchived: false,
-    tags: ['setup', 'development', 'tools'],
-    createdAt: new Date('2024-09-12T10:00:00'),
-    updatedAt: new Date('2024-09-21T15:30:00'),
-    author: 'Hoàng Văn Nam'
-  },
-  {
-    id: 6,
-    title: 'Ôn tập kiến thức Vue.js',
-    content: `Tổng hợp các kiến thức quan trọng về Vue.js cần nắm vững.
-
-## Composition API vs Options API
-### Composition API (Vue 3)
-\`\`\`javascript
-// In SFC (Single File Component)
-import { ref, computed, onMounted } from 'vue'
-
-const count = ref(0)
-const doubleCount = computed(() => count.value * 2)
-
-onMounted(() => {
-  console.log('Component mounted')
-})
-\`\`\`
-
-### Options API (Vue 2)
-\`\`\`javascript
-export default {
-  data() {
-    return {
-      count: 0
-    }
-  },
-  computed: {
-    doubleCount() {
-      return this.count * 2
-    }
-  },
-  mounted() {
-    console.log('Component mounted')
-  }
-}
-\`\`\`
-
-## Lifecycle Hooks
-- \`onMounted()\` - Component đã mount
-- \`onUpdated()\` - Component đã update
-- \`onUnmounted()\` - Component sắp unmount`,
-    category: 'study',
-    priority: 'high',
-    status: 'active',
-    isFavorite: true,
-    isArchived: false,
-    tags: ['vue', 'frontend', 'javascript'],
-    createdAt: new Date('2024-09-08T14:20:00'),
-    updatedAt: new Date('2024-09-20T09:45:00'),
-    author: 'Nguyễn Thị Mai'
-  }
-])
-
 // Stats
-const stats = computed(() => ({
-  total: notes.value.length,
-  active: notes.value.filter(n => n.status === 'active').length,
-  completed: notes.value.filter(n => n.status === 'completed').length,
-  favorites: notes.value.filter(n => n.isFavorite).length,
-  archived: notes.value.filter(n => n.isArchived).length
-}))
+const stats = computed(() => {
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  
+  return {
+    total: globalTotalCount.value || totalCount.value,
+    active: notes.value.filter(n => n.status === 'active').length,
+    completed: notes.value.filter(n => n.status === 'completed').length,
+    favorites: notes.value.filter(n => n.isFavorite).length,
+    archived: notes.value.filter(n => n.isArchived).length,
+    // recent removed
+  }
+})
 
-// Filtered notes
+// Filtered notes - API đã filter rồi, chỉ cần trả về notes
 const filteredNotes = computed(() => {
-  let filtered = notes.value
-
-  // Quick filter
-  if (quickFilter.value === 'favorites') {
-    filtered = filtered.filter(note => note.isFavorite)
-  } else if (quickFilter.value === 'recent') {
-    const today = new Date()
-    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-    filtered = filtered.filter(note => new Date(note.updatedAt) >= lastWeek)
-  } else if (quickFilter.value === 'archived') {
-    filtered = filtered.filter(note => note.isArchived)
-  } else {
-    // 'all' - show non-archived notes
-    filtered = filtered.filter(note => !note.isArchived)
-  }
-
-  // Search filter
-  if (filters.value.search) {
-    const query = filters.value.search.toLowerCase()
-    filtered = filtered.filter(note => 
-      note.title.toLowerCase().includes(query) ||
-      note.content.toLowerCase().includes(query) ||
-      note.tags.some(tag => tag.toLowerCase().includes(query))
-    )
-  }
-
-  // Category filter
-  if (filters.value.category) {
-    filtered = filtered.filter(note => note.category === filters.value.category)
-  }
-
-  // Status filter
-  if (filters.value.status) {
-    filtered = filtered.filter(note => note.status === filters.value.status)
-  }
-
-  // Priority filter
-  if (filters.value.priority) {
-    filtered = filtered.filter(note => note.priority === filters.value.priority)
-  }
-
-  // Sorting
-  filtered.sort((a, b) => {
+  // Sorting local (nếu cần)
+  let sorted = [...notes.value]
+  
+  sorted.sort((a, b) => {
     switch (sortBy.value) {
       case 'title':
         return a.title.localeCompare(b.title)
@@ -544,11 +394,11 @@ const filteredNotes = computed(() => {
     }
   })
 
-  return filtered
+  return sorted
 })
 
 // Methods
-const resetFilters = () => {
+const handleResetFilters = async () => {
   filters.value = {
     search: '',
     category: '',
@@ -556,6 +406,8 @@ const resetFilters = () => {
     priority: '',
     dateRange: null
   }
+  quickFilter.value = 'all'
+  await resetFilters() // từ useNotes hook
 }
 
 const toggleViewMode = () => {
@@ -566,27 +418,80 @@ const toggleDensity = () => {
   density.value = density.value === 'comfortable' ? 'compact' : 'comfortable'
 }
 
-const setQuickFilter = (filter) => {
+const setQuickFilter = async (filter) => {
+  console.log('🔄 Setting quick filter to:', filter)
   quickFilter.value = filter
-  // Reset other filters when changing quick filter
-  if (filter !== 'all') {
-    filters.value.category = ''
+  
+  // Reset category filter when switching quick filters
+  filters.value.category = ''
+  
+  try {
+    // Gọi API với filter tương ứng
+    if (filter === 'favorites') {
+      console.log('📱 Fetching favorite notes...')
+      await fetchNotes({ isFavorite: true, isArchived: false })
+      // Ensure client-side enforcement in case backend ignored the param
+      notes.value = notes.value.filter(n => n.isFavorite)
+      totalCount.value = notes.value.length
+    } else if (filter === 'archived') {
+      console.log('📦 Fetching archived notes...')
+      await fetchNotes({ isArchived: true })
+      // Client-side enforcement fallback
+      notes.value = notes.value.filter(n => n.isArchived)
+      totalCount.value = notes.value.length
+    } else {
+      console.log('📄 Fetching all notes...')
+      // 'all' - non-archived notes
+      await fetchNotes({ isArchived: false })
+    }
+    console.log('✅ Quick filter applied successfully:', filter)
+  } catch (error) {
+    console.error('❌ Error applying quick filter:', error)
   }
 }
 
-const toggleCategory = (category) => {
+const toggleCategory = async (category) => {
+  // Toggle local UI filter value (store the `value` like 'study')
   filters.value.category = filters.value.category === category ? '' : category
   quickFilter.value = 'all'
+
+  // Map category value to backend category_id numeric (CATEGORY_MAP keys are numeric)
+  const entry = Object.entries(CATEGORY_MAP).find(([id, obj]) => obj.value === category)
+  const categoryId = entry ? Number(entry[0]) : null
+
+  // Filter by category but DON'T reset categoriesSummary
+  // Keep the global summary for accurate counts in sidebar
+  await filterByCategory(categoryId)
 }
 
 const getCategoryCount = (category) => {
-  if (!category) return notes.value.length
-  return notes.value.filter(note => note.category === category).length
+  // For "Tất cả" show global total (unfiltered)
+  if (!category) return globalTotalCount.value || totalCount.value
+
+  // Map UI category value (e.g., 'study') to categoryId (numeric) using CATEGORY_MAP
+  const entry = Object.entries(CATEGORY_MAP).find(([id, obj]) => obj.value === category)
+  const categoryId = entry ? Number(entry[0]) : null
+
+  console.debug(`Getting count for category: ${category}, categoryId: ${categoryId}`)
+  console.debug('categoriesSummary.value:', categoriesSummary?.value)
+
+  // Always use categoriesSummary from backend if available (authoritative source)
+  if (Array.isArray(categoriesSummary?.value) && categoriesSummary.value.length > 0 && categoryId !== null) {
+    const found = categoriesSummary.value.find(c => Number(c.note_category_id) === categoryId)
+    if (found) {
+      return Number(found.count) || 0
+    }
+  }
+
+  // Fallback: count from currently loaded notes only as last resort
+  // Note: This may show 0 when filtering by category since loaded notes are filtered
+  const label = entry ? entry[1].label : ''
+  const fallbackCount = notes.value.filter(note => note.category === label).length
+  return fallbackCount
 }
 
 const getContentTitle = () => {
   if (quickFilter.value === 'favorites') return 'Ghi chú yêu thích'
-  if (quickFilter.value === 'recent') return 'Ghi chú gần đây'
   if (quickFilter.value === 'archived') return 'Ghi chú đã lưu trữ'
   if (filters.value.category) {
     const category = categories.find(c => c.value === filters.value.category)
@@ -598,7 +503,6 @@ const getContentTitle = () => {
 const getEmptyStateMessage = () => {
   if (filters.value.search) return `Không tìm thấy ghi chú nào phù hợp với "${filters.value.search}"`
   if (quickFilter.value === 'favorites') return 'Bạn chưa có ghi chú yêu thích nào'
-  if (quickFilter.value === 'recent') return 'Không có ghi chú nào được cập nhật trong tuần qua'
   if (quickFilter.value === 'archived') return 'Không có ghi chú nào được lưu trữ'
   if (filters.value.category) return 'Không có ghi chú nào trong danh mục này'
   return 'Bạn chưa có ghi chú nào. Hãy tạo ghi chú đầu tiên!'
@@ -614,26 +518,110 @@ const editNote = (note) => {
   showEditModal.value = true
 }
 
-const deleteNote = (note) => {
-  if (confirm(`Bạn có chắc chắn muốn xóa ghi chú "${note.title}"?`)) {
-    const index = notes.value.findIndex(n => n.id === note.id)
-    if (index > -1) {
-      notes.value.splice(index, 1)
+const confirmDeleteNote = (note) => {
+  noteToDelete.value = note
+  showConfirmDelete.value = true
+}
+
+const executeDeleteNote = async () => {
+  if (!noteToDelete.value) return
+  
+  deletingNote.value = true
+  
+  try {
+    // Call API to delete the note
+    await deleteNoteAPI(noteToDelete.value.id)
+
+    // Refresh lists and counts
+    await fetchNotes()
+    await fetchGlobalCount()
+    
+    // Refresh categories summary to update counts
+    if (typeof fetchCategoriesSummary === 'function') {
+      await fetchCategoriesSummary()
     }
+
+    // Close view modal if open
+    if (showViewModal.value) {
+      closeViewModalWithRouter()
+    }
+
+    success(
+      `Ghi chú "${noteToDelete.value.title}" đã được xóa thành công`,
+      'Xóa thành công'
+    )
+  } catch (err) {
+    console.error('Error deleting note:', err)
+    error(
+      'Đã xảy ra lỗi khi xóa ghi chú. Vui lòng thử lại.',
+      'Lỗi xóa ghi chú'
+    )
+  } finally {
+    deletingNote.value = false
+    showConfirmDelete.value = false
+    noteToDelete.value = null
   }
 }
 
-const toggleFavorite = (note) => {
-  const noteIndex = notes.value.findIndex(n => n.id === note.id)
-  if (noteIndex > -1) {
-    notes.value[noteIndex].isFavorite = !notes.value[noteIndex].isFavorite
+const cancelDeleteNote = () => {
+  showConfirmDelete.value = false
+  noteToDelete.value = null
+  deletingNote.value = false
+}
+
+const deleteNote = (note) => {
+  confirmDeleteNote(note)
+}
+
+const toggleFavorite = async (note) => {
+  try {
+    const result = await toggleFavoriteAPI(note.id)
+    // Lấy state MỚI từ kết quả API
+    const newState = result
+    // Refresh để lấy data mới nhất và giữ bộ lọc hiện tại
+    if (quickFilter.value === 'favorites') {
+      await fetchNotes({ isFavorite: true, isArchived: false })
+    } else if (quickFilter.value === 'archived') {
+      await fetchNotes({ isArchived: true })
+    } else {
+      await fetchNotes({ isArchived: false })
+    }
+    info(
+      newState 
+        ? `Đã thêm ghi chú "${note.title}" vào danh sách yêu thích` 
+        : `Đã xóa ghi chú "${note.title}" khỏi danh sách yêu thích`,
+      newState ? 'Đã thêm vào yêu thích' : 'Đã xóa khỏi yêu thích'
+    )
+  } catch (err) {
+    error(err.message || 'Không thể cập nhật trạng thái yêu thích', 'Lỗi')
   }
 }
 
-const toggleArchive = (note) => {
-  const noteIndex = notes.value.findIndex(n => n.id === note.id)
-  if (noteIndex > -1) {
-    notes.value[noteIndex].isArchived = !notes.value[noteIndex].isArchived
+const toggleArchive = async (note) => {
+  try {
+    const result = await toggleArchiveAPI(note.id)
+    // Lấy state MỚI từ kết quả API
+    const newState = result
+    // Refresh và giữ bộ lọc hiện tại
+    if (quickFilter.value === 'favorites') {
+      await fetchNotes({ isFavorite: true, isArchived: false })
+      notes.value = notes.value.filter(n => n.isFavorite)
+      totalCount.value = notes.value.length
+    } else if (quickFilter.value === 'archived') {
+      await fetchNotes({ isArchived: true })
+      notes.value = notes.value.filter(n => n.isArchived)
+      totalCount.value = notes.value.length
+    } else {
+      await fetchNotes({ isArchived: false })
+    }
+    info(
+      newState 
+        ? `Ghi chú "${note.title}" đã được lưu trữ` 
+        : `Ghi chú "${note.title}" đã được khôi phục`,
+      newState ? 'Đã lưu trữ' : 'Đã khôi phục'
+    )
+  } catch (err) {
+    error(err.message || 'Không thể cập nhật trạng thái lưu trữ', 'Lỗi')
   }
 }
 
@@ -653,75 +641,108 @@ const editFromView = (note) => {
   editNoteWithRouter(note)
 }
 
-const saveNote = (noteData) => {
-  let savedNote
+const saveNote = async () => {
+  // NoteModal đã gọi API và emit 'save'
+  // Chỉ cần refresh data
+  await fetchNotes()
+  await fetchGlobalCount()
   
-  if (editingNote.value) {
-    // Update existing note
-    const index = notes.value.findIndex(n => n.id === editingNote.value.id)
-    if (index > -1) {
-      notes.value[index] = { 
-        ...notes.value[index], 
-        ...noteData, 
-        updatedAt: new Date()
-      }
-      savedNote = notes.value[index]
-    }
-  } else {
-    // Create new note
-    const newNote = {
-      id: Date.now(),
-      ...noteData,
-      status: 'active',
-      isFavorite: false,
-      isArchived: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      author: 'Current User'
-    }
-    notes.value.unshift(newNote)
-    savedNote = newNote
+  // Refresh categories summary to update counts
+  if (typeof fetchCategoriesSummary === 'function') {
+    await fetchCategoriesSummary()
   }
   
-  // Close modals and navigate
   closeModalsWithRouter()
-  
-  // Navigate to view the saved note
-  if (savedNote) {
-    setTimeout(() => {
-      router.push({ name: 'notes-view', params: { id: savedNote.id } })
-    }, 100)
-  }
+}
+
+const handleNoteModalRefresh = async () => {
+  await fetchNotes()
 }
 
 // Bulk Actions
-const handleBulkDelete = (noteIds) => {
-  notes.value = notes.value.filter(n => !noteIds.includes(n.id))
-  selectedNotes.value = []
+const handleBulkDelete = async (noteIds) => {
+  if (confirm(`Bạn có chắc chắn muốn xóa ${noteIds.length} ghi chú đã chọn?`)) {
+    try {
+      await bulkDeleteNotes(noteIds)
+      selectedNotes.value = []
+      success(
+        `Đã xóa ${noteIds.length} ghi chú thành công`,
+        'Xóa nhiều ghi chú thành công'
+      )
+    } catch (err) {
+      error(err.message || 'Đã xảy ra lỗi khi xóa ghi chú', 'Lỗi')
+    }
+  }
 }
 
-const handleBulkArchive = (noteIds) => {
-  noteIds.forEach(id => {
-    const note = notes.value.find(n => n.id === id)
-    if (note) note.isArchived = !note.isArchived
-  })
-  selectedNotes.value = []
+const handleBulkArchive = async (noteIds) => {
+  try {
+    // Bulk archive - gọi API từng cái (backend chưa có bulk API)
+    for (const id of noteIds) {
+      const note = notes.value.find(n => n.id === id)
+      if (note) {
+        await toggleArchiveAPI(id)
+      }
+    }
+    await fetchNotes()
+    selectedNotes.value = []
+    info(
+      `Đã cập nhật trạng thái lưu trữ cho ${noteIds.length} ghi chú`,
+      'Cập nhật thành công'
+    )
+  } catch (err) {
+    error(err.message || 'Đã xảy ra lỗi', 'Lỗi')
+  }
 }
 
-const handleBulkFavorite = (noteIds) => {
-  noteIds.forEach(id => {
-    const note = notes.value.find(n => n.id === id)
-    if (note) note.isFavorite = !note.isFavorite
-  })
-  selectedNotes.value = []
+const handleBulkFavorite = async (noteIds) => {
+  try {
+    // Bulk favorite - gọi API từng cái
+    for (const id of noteIds) {
+      const note = notes.value.find(n => n.id === id)
+      if (note) {
+        await toggleFavoriteAPI(id)
+      }
+    }
+    await fetchNotes()
+    selectedNotes.value = []
+    info(
+      `Đã cập nhật trạng thái yêu thích cho ${noteIds.length} ghi chú`,
+      'Cập nhật thành công'
+    )
+  } catch (err) {
+    error(err.message || 'Đã xảy ra lỗi', 'Lỗi')
+  }
 }
 
-const handleBulkCategory = ({ notes: noteIds, category }) => {
-  noteIds.forEach(id => {
-    const note = notes.value.find(n => n.id === id)
-    if (note) note.category = category
-  })
-  selectedNotes.value = []
+const handleBulkCategory = async ({ notes: noteIds, category }) => {
+  try {
+    // Update category for each note via API
+    for (const id of noteIds) {
+      const note = notes.value.find(n => n.id === id)
+      if (note) {
+        // Get category ID from category label
+        const categoryId = Object.entries(CATEGORY_MAP).find(
+          ([_, label]) => label === category
+        )?.[0]
+        
+        if (categoryId) {
+          await updateNote(id, {
+            ...note,
+            categoryId: parseInt(categoryId)
+          })
+        }
+      }
+    }
+    await fetchNotes()
+    selectedNotes.value = []
+    info(
+      `Đã cập nhật danh mục cho ${noteIds.length} ghi chú`,
+      'Cập nhật thành công'
+    )
+  } catch (err) {
+    error(err.message || 'Đã xảy ra lỗi', 'Lỗi')
+  }
 }
 
 // Router-based methods
@@ -742,25 +763,36 @@ const backToNotes = () => {
 }
 
 // Handle route-based actions
-const handleRouteAction = () => {
+const handleRouteAction = async () => {
   const action = route.meta?.action
   const noteId = route.params?.id
   
   if (action === 'create') {
     showCreateModal.value = true
   } else if (action === 'view' && noteId) {
-    const note = notes.value.find(n => n.id === parseInt(noteId))
-    if (note) {
-      viewNote(note)
-    } else {
-      // Note not found, redirect to notes list
+    try {
+      // Fetch note from API instead of finding in local array
+      const note = await fetchNoteById(parseInt(noteId))
+      if (note) {
+        viewNote(note)
+      } else {
+        router.push({ name: 'notes' })
+      }
+    } catch (err) {
+      error('Không tìm thấy ghi chú', 'Lỗi')
       router.push({ name: 'notes' })
     }
   } else if (action === 'edit' && noteId) {
-    const note = notes.value.find(n => n.id === parseInt(noteId))
-    if (note) {
-      editNote(note)
-    } else {
+    try {
+      // Fetch note from API instead of finding in local array
+      const note = await fetchNoteById(parseInt(noteId))
+      if (note) {
+        editNote(note)
+      } else {
+        router.push({ name: 'notes' })
+      }
+    } catch (err) {
+      error('Không tìm thấy ghi chú', 'Lỗi')
       router.push({ name: 'notes' })
     }
   }
@@ -801,13 +833,43 @@ const closeViewModalWithRouter = () => {
 }
 
 // Watchers
+// Watchers
 watch(() => route.fullPath, () => {
   handleRouteAction()
 }, { immediate: true })
 
+// Watch search input for debounced API search
+watch(() => filters.value.search, async (newVal) => {
+  // Only search if 3+ characters or empty (to reset)
+  if (newVal.length >= 3 || newVal === '') {
+    await search(newVal)
+  }
+}, { debounce: 300 })
+
 // Lifecycle
-onMounted(() => {
-  handleRouteAction()
+onMounted(async () => {
+  // Fetch initial notes data
+  try {
+    await fetchNotes()
+    // ensure global count is fetched too (may use categories-summary fallback)
+    if (typeof fetchGlobalCount === 'function') await fetchGlobalCount()
+    // Fetch categories summary from backend (for accurate per-category counts)
+    if (typeof fetchCategoriesSummary === 'function') {
+      // Use setTimeout to avoid conflicts with third-party scripts
+      setTimeout(async () => {
+        try {
+          await fetchCategoriesSummary()
+        } catch (e) {
+          console.error('Failed to fetch categories summary:', e)
+        }
+      }, 1000)
+    }
+    handleRouteAction()
+  } catch (err) {
+    // Avoid uncaught exception in mounted hook when backend returns 400/SQL errors
+    console.error('Initial notes load failed:', err)
+    error('Không thể tải danh sách ghi chú. Vui lòng thử lại sau.', 'Lỗi tải ghi chú')
+  }
 })
 </script>
 

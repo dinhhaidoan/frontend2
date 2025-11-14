@@ -1,11 +1,12 @@
 <template>
   <div v-if="isVisible" class="modal-overlay" @click="closeModal">
     <div class="modal-container" @click.stop>
+      <!-- Always-visible close button in top-right corner of modal (useful when modal scrolls) -->
+      <button class="overlay-close" @click="closeModal" aria-label="Đóng">
+        <i class="fas fa-times"></i>
+      </button>
       <div class="modal-header">
         <h2>{{ isEditing ? 'Chỉnh sửa ghi chú' : 'Tạo ghi chú mới' }}</h2>
-        <button @click="closeModal" class="close-btn">
-          <i class="fas fa-times"></i>
-        </button>
       </div>
       
       <form @submit.prevent="handleSubmit" class="modal-body">
@@ -30,12 +31,11 @@
             <label for="category">Danh mục</label>
             <select id="category" v-model="formData.category" class="form-select">
               <option value="">Chọn danh mục</option>
-              <option value="study">📚 Học tập</option>
-              <option value="project">📋 Dự án</option>
-              <option value="meeting">👥 Cuộc họp</option>
-              <option value="resource">📖 Tài liệu</option>
-              <option value="personal">👤 Cá nhân</option>
-              <option value="work">💼 Công việc</option>
+              <option value="study">Học tập</option>
+              <option value="project">Dự án</option>
+              <option value="resource">Tài liệu</option>
+              <option value="meeting">Họp</option>
+              <option value="personal">Cá nhân</option>
             </select>
           </div>
           
@@ -150,10 +150,10 @@
             </div>
             <input
               v-model="newTag"
-              @keyup.enter="addTag"
+              @keydown.enter.prevent="addTag"
               @keyup.comma="addTag"
               type="text"
-              placeholder="Nhập thẻ và nhấn Enter..."
+              placeholder="Nhập thẻ và nhấn Enter hoặc dấu phẩy..."
               class="tag-input"
             />
           </div>
@@ -191,11 +191,33 @@
         </div>
       </form>
     </div>
+
+    <!-- Confirm Save Dialog -->
+    <ConfirmDialog
+      v-model:show="showConfirmSave"
+      :type="isSavingDraft ? 'info' : 'success'"
+      :title="isSavingDraft ? 'Xác nhận lưu nháp' : (isEditing ? 'Xác nhận cập nhật' : 'Xác nhận tạo ghi chú')"
+      :message="isSavingDraft 
+        ? 'Bạn có chắc chắn muốn lưu ghi chú này dưới dạng nháp?' 
+        : (isEditing 
+          ? 'Bạn có chắc chắn muốn lưu các thay đổi cho ghi chú này?' 
+          : 'Bạn có chắc chắn muốn tạo ghi chú mới này?')"
+      :details="pendingSaveData?.title"
+      :confirmText="isSavingDraft ? 'Lưu nháp' : (isEditing ? 'Cập nhật' : 'Tạo ghi chú')"
+      :loading="loading"
+      @confirm="confirmSave"
+      @cancel="cancelSave"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useToast } from '@/composables/useToast'
+import { useNotes } from '@/hooks/useNotes'
+import { useAuthStore } from '@/stores/auth'
+import { CATEGORY_MAP } from '@/types/note'
 
 const props = defineProps({
   isVisible: {
@@ -212,13 +234,30 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'save', 'save-draft'])
+const emit = defineEmits(['close', 'save', 'save-draft', 'refresh'])
+
+// Toast
+const { success, error } = useToast()
+
+// Notes hook
+const { createNote, updateNote } = useNotes()
+
+// Auth store to attach author name when creating notes
+const authStore = useAuthStore()
+const getAuthDisplayName = () => {
+  const u = authStore.user || {}
+  return (
+    u.name || u.full_name || u.user_name || u.userId || u.user_code || u.username || u.displayName || 'Người dùng'
+  )
+}
 
 // Form data
 const formData = ref({
   title: '',
   content: '',
+  // `category` holds the UI value (e.g., 'study'), `categoryId` holds backend numeric id
   category: '',
+  categoryId: null,
   priority: 'medium',
   status: 'draft',
   tags: [],
@@ -233,13 +272,33 @@ const showPreview = ref(false)
 const newTag = ref('')
 const contentEditor = ref(null)
 
+// Confirm dialog
+const showConfirmSave = ref(false)
+const pendingSaveData = ref(null)
+const isSavingDraft = ref(false)
+
 // Watch for prop changes
 watch(() => props.note, (newNote) => {
   if (newNote && props.isEditing) {
+    // Try to map backend category label to our UI value and id
+    let categoryValue = ''
+    let categoryId = null
+    if (newNote.category) {
+      const entry = Object.entries(CATEGORY_MAP).find(([, obj]) => obj.label === newNote.category || obj.value === newNote.category)
+      if (entry) {
+        categoryId = Number(entry[0])
+        categoryValue = entry[1].value
+      } else {
+        // fallback: set label as value
+        categoryValue = newNote.category
+      }
+    }
+
     formData.value = {
       title: newNote.title || '',
       content: newNote.content || '',
-      category: newNote.category || '',
+      category: categoryValue,
+      categoryId: categoryId,
       priority: newNote.priority || 'medium',
       status: newNote.status || 'draft',
       tags: [...(newNote.tags || [])],
@@ -261,6 +320,20 @@ watch(() => props.isVisible, (visible) => {
     })
   } else {
     document.body.style.overflow = ''
+  }
+})
+
+// Watch for category changes to sync categoryId
+watch(() => formData.value.category, (newCategory) => {
+  if (newCategory) {
+    const entry = Object.entries(CATEGORY_MAP).find(([, obj]) => obj.value === newCategory)
+    if (entry) {
+      formData.value.categoryId = Number(entry[0])
+    } else {
+      formData.value.categoryId = null
+    }
+  } else {
+    formData.value.categoryId = null
   }
 })
 
@@ -301,6 +374,7 @@ const resetForm = () => {
     title: '',
     content: '',
     category: '',
+    categoryId: null,
     priority: 'medium',
     status: 'draft',
     tags: [],
@@ -329,34 +403,103 @@ const validateForm = () => {
 const handleSubmit = async () => {
   if (!validateForm()) return
   
+  // Prepare note data
+  const noteData = {
+    ...formData.value,
+    title: formData.value.title.trim(),
+    content: formData.value.content.trim(),
+    tags: formData.value.tags.filter(tag => tag.trim()),
+    updatedAt: new Date().toISOString()
+  }
+
+  // Ensure categoryId is set when user selected a category value
+  if (!noteData.categoryId && noteData.category) {
+    const entry = Object.entries(CATEGORY_MAP).find(([, obj]) => obj.value === noteData.category || obj.label === noteData.category)
+    if (entry) {
+      noteData.categoryId = Number(entry[0])
+    }
+  }
+  
+  if (props.isEditing) {
+    noteData.id = props.note.id
+  } else {
+  noteData.createdAt = new Date().toISOString()
+  noteData.author = getAuthDisplayName()
+  }
+  
+  // Show confirm dialog
+  pendingSaveData.value = noteData
+  isSavingDraft.value = false
+  showConfirmSave.value = true
+}
+
+const confirmSave = async () => {
+  if (!pendingSaveData.value) return
+  
   loading.value = true
+  showConfirmSave.value = false
   
   try {
-    const noteData = {
-      ...formData.value,
-      title: formData.value.title.trim(),
-      content: formData.value.content.trim(),
-      tags: formData.value.tags.filter(tag => tag.trim()),
-      updatedAt: new Date().toISOString()
-    }
+    const noteData = pendingSaveData.value
+    const tags = noteData.tags || []
+    
+    let savedNote
     
     if (props.isEditing) {
-      noteData.id = props.note.id
+      // Update existing note
+      savedNote = await updateNote(
+        props.note.id,
+        noteData,
+        tags
+      )
+      
+      success(
+        'Ghi chú đã được cập nhật thành công',
+        'Cập nhật thành công'
+      )
+      
+      emit('save', savedNote)
     } else {
-      noteData.createdAt = new Date().toISOString()
-      noteData.author = 'Admin' // This should come from user context
+      // Create new note
+      savedNote = await createNote(noteData, tags)
+      
+      success(
+        isSavingDraft.value
+          ? 'Ghi chú đã được lưu thành nháp'
+          : 'Ghi chú mới đã được tạo thành công',
+        isSavingDraft.value ? 'Lưu nháp thành công' : 'Tạo thành công'
+      )
+      
+      if (isSavingDraft.value) {
+        emit('save-draft', savedNote)
+      } else {
+        emit('save', savedNote)
+      }
     }
     
-    emit('save', noteData)
+    // Emit refresh để parent reload data
+    emit('refresh')
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // Close modal after successful save
+    closeModal()
     
-  } catch (error) {
-    console.error('Error saving note:', error)
+  } catch (err) {
+    console.error('Error saving note:', err)
+    error(
+      err.message || 'Đã xảy ra lỗi khi lưu ghi chú. Vui lòng thử lại.',
+      'Lỗi lưu ghi chú'
+    )
   } finally {
     loading.value = false
+    pendingSaveData.value = null
+    isSavingDraft.value = false
   }
+}
+
+const cancelSave = () => {
+  showConfirmSave.value = false
+  pendingSaveData.value = null
+  loading.value = false
 }
 
 const saveDraft = async () => {
@@ -365,39 +508,50 @@ const saveDraft = async () => {
     return
   }
   
-  loading.value = true
-  
-  try {
-    const noteData = {
-      ...formData.value,
-      title: formData.value.title.trim(),
-      content: formData.value.content.trim(),
-      status: 'draft',
-      tags: formData.value.tags.filter(tag => tag.trim()),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      author: 'Admin'
-    }
-    
-    emit('save-draft', noteData)
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-  } catch (error) {
-    console.error('Error saving draft:', error)
-  } finally {
-    loading.value = false
+  // Prepare draft data
+  const noteData = {
+    ...formData.value,
+    title: formData.value.title.trim(),
+    content: formData.value.content.trim(),
+    status: 'draft',
+    tags: formData.value.tags.filter(tag => tag.trim()),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  author: getAuthDisplayName()
   }
+
+  // Map category value to categoryId for draft as well
+  if (!noteData.categoryId && noteData.category) {
+    const entry = Object.entries(CATEGORY_MAP).find(([, obj]) => obj.value === noteData.category || obj.label === noteData.category)
+    if (entry) {
+      noteData.categoryId = Number(entry[0])
+    }
+  }
+  
+  // Show confirm dialog
+  pendingSaveData.value = noteData
+  isSavingDraft.value = true
+  showConfirmSave.value = true
 }
 
 const addTag = () => {
-  const tag = newTag.value.trim().replace(/[,#]/g, '')
-  
-  if (tag && !formData.value.tags.includes(tag) && formData.value.tags.length < 10) {
-    formData.value.tags.push(tag)
-    newTag.value = ''
+  if (!newTag.value) return
+
+  // Split by comma to allow adding multiple tags in one go
+  const raw = newTag.value
+  const parts = raw.split(',').map(p => p.trim()).filter(p => p.length > 0)
+
+  for (const p of parts) {
+    // sanitize: remove leading # and commas
+    const tag = p.replace(/^#/, '').replace(/[#,]/g, '').trim()
+    if (!tag) continue
+    if (!formData.value.tags.includes(tag) && formData.value.tags.length < 10) {
+      formData.value.tags.push(tag)
+    }
   }
+
+  // clear input after adding
+  newTag.value = ''
 }
 
 const removeTag = (index) => {
@@ -515,29 +669,36 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.close-btn {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  transition: all 0.2s ease;
-}
-
-.close-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
+/* header close button removed — overlay-close is used instead */
 
 .modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 32px;
 }
+
+/* Overlay close button visible in the top-right of the modal container */
+.overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.9);
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  cursor: pointer;
+  z-index: 30;
+}
+
+.overlay-close i { font-size: 14px; }
+
+.overlay-close:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,0.18); }
 
 .form-group {
   margin-bottom: 24px;

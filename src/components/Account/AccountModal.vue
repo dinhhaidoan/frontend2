@@ -24,6 +24,7 @@
             <label>Mã số</label>
             <input v-model="formData.userId" type="text" :disabled="isEdit" />
             <small v-if="isEdit" class="muted">Mã số không thể thay đổi sau khi tạo</small>
+            <span v-if="isEdit" class="locked-badge"><i class="fas fa-lock"></i> Đã khóa</span>
           </div>
           
           <div class="form-group">
@@ -36,6 +37,7 @@
               <option value="admin">Quản trị viên</option>
             </select>
             <small v-if="isEdit" class="muted">Vai trò bị khóa — liên hệ quản trị nếu cần thay đổi</small>
+            <span v-if="isEdit" class="locked-badge"><i class="fas fa-lock"></i> Đã khóa</span>
           </div>
           
           <div class="form-group">
@@ -77,6 +79,7 @@
 <script setup>
 import { ref, watch, reactive, toRef } from 'vue'
 import { useModalBodyScroll } from '@/composables/useModalBodyScroll'
+import { createEmptyAccount } from '@/types/account'
 
 const props = defineProps({
   show: {
@@ -100,22 +103,15 @@ useModalBodyScroll(toRef(props, 'show'))
 
 const showPassword = ref(false)
 
-const formData = reactive({
-  id: null,
-  name: '',
-  email: '',
-  userId: '',
-  role: '',
-  phone: '',
-  password: ''
-})
+const formData = reactive(createEmptyAccount())
 
 const isEdit = ref(false)
 
 // Define resetForm function first
 const resetForm = () => {
-  Object.keys(formData).forEach(key => {
-    formData[key] = key === 'id' ? null : ''
+  const empty = createEmptyAccount()
+  Object.keys(empty).forEach(key => {
+    formData[key] = empty[key]
   })
   showPassword.value = false
 }
@@ -312,6 +308,33 @@ const handleSubmit = () => {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
+}
+
+/* Highlight disabled / locked fields so users notice they cannot edit them */
+.form-group input[disabled],
+.form-group select[disabled] {
+  background: linear-gradient(90deg, #fffbeb, #fff7ed);
+  border-color: #f59e0b;
+  color: #92400e;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 0 0 4px rgba(245,158,11,0.06);
+}
+
+.locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  background: #fff7ed;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.locked-badge i {
+  font-size: 12px;
 }
 
 /* Buttons */

@@ -80,7 +80,7 @@ onUnmounted(() => {
 header {
   position: fixed;
   top: 0;
-  z-index: 50;
+  z-index: 99999; /* raised so header dropdowns sit above other components */
   backdrop-filter: blur(8px);
 }
 
