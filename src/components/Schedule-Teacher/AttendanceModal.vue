@@ -60,7 +60,7 @@
               @click="toggleAttendance(student)"
             >
               <div class="student-info">
-                <img :src="student.avatar" :alt="student.name" class="student-avatar">
+                <img :src="avatarSrc(student.avatar)" :alt="student.name" class="student-avatar" @error="onAvatarError($event, student.avatar)">
                 <div class="student-details">
                   <div class="student-name">{{ student.name }}</div>
                   <div class="student-code">{{ student.code }}</div>
@@ -139,7 +139,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   schedule: {
@@ -164,6 +165,28 @@ const students = ref([
   { id: 7, name: 'Đặng Văn G', code: 'SV007', avatar: 'https://i.pravatar.cc/150?img=7', present: true },
   { id: 8, name: 'Bùi Thị H', code: 'SV008', avatar: 'https://i.pravatar.cc/150?img=8', present: true }
 ])
+
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return '/default-avatar.png'
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+})
 
 const filteredStudents = computed(() => {
   if (!searchQuery.value) return students.value

@@ -20,13 +20,6 @@
       <table class="account-table">
         <thead>
           <tr>
-            <th>
-              <input 
-                type="checkbox" 
-                :checked="selectAll" 
-                @change="$emit('toggle-select-all', $event.target.checked)" 
-              />
-            </th>
             <th @click="$emit('sort', 'avatar')" class="sortable">
               <i class="fas fa-user-circle"></i>
             </th>
@@ -61,19 +54,15 @@
           <tr 
             v-for="account in accounts" 
             :key="account.id"
-            :class="{ 'selected': selectedAccounts.includes(account.id) }"
-          >
-            <td>
-              <input 
-                type="checkbox" 
-                :value="account.id"
-                :checked="selectedAccounts.includes(account.id)"
-                @change="$emit('toggle-select', account.id)"
-              />
-            </td>
+            :class="{ 'selected': selectedAccounts.includes(account.id) }">
             <td class="avatar-cell">
               <div class="user-avatar">
-                <img v-if="account.avatar" :src="account.avatar" :alt="account.name" />
+                <img
+                  v-if="account.avatar && (!_failed.has(account.avatar) || _blobMap.has(account.avatar))"
+                  :src="avatarSrc(account.avatar)"
+                  :alt="account.name"
+                  @error="onAvatarError($event, account.avatar)"
+                />
                 <div v-else class="avatar-placeholder">
                   {{ getInitials(account.name) }}
                 </div>
@@ -180,7 +169,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   accounts: {
@@ -216,6 +206,48 @@ const props = defineProps({
     type: Number,
     required: true
   }
+})
+
+// local cache for fallback blob urls and failed urls
+const _blobMap = ref(new Map()) // originalUrl -> blobUrl
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return ''
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  // prevent infinite retry loops
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    // hide broken image so placeholder shows
+    try { ev.target.style.display = 'none' } catch (e) {}
+    return
+  }
+  if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+
+  try {
+    const blobUrl = await fetchImageAsBlobUrl(url)
+    if (blobUrl) {
+      _blobMap.value.set(url, blobUrl)
+      if (ev && ev.target) ev.target.src = blobUrl
+      return
+    }
+  } catch (e) {
+    // fetch failed (403 or other). mark as failed to show placeholder
+    _failed.value.add(url)
+  }
+  try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+}
+
+onBeforeUnmount(() => {
+  // revoke any created blob urls
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
 })
 
 const emit = defineEmits([

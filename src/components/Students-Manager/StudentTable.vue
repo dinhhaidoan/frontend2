@@ -90,7 +90,13 @@
             </td>
             <td>
               <div class="student-info">
-                <img :src="student.avatar || '/default-avatar.png'" :alt="student.fullName" />
+                <img
+                  v-if="student.avatar && (!(_failed.has(student.avatar)) || _blobMap.value.has(student.avatar))"
+                  :src="avatarSrc(student.avatar)"
+                  :alt="student.fullName"
+                  @error="onAvatarError($event, student.avatar)"
+                />
+                <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
                 <div>
                   <strong>{{ student.fullName }}</strong>
                   <small>{{ student.email }}</small>
@@ -146,7 +152,13 @@
     <div v-else class="grid-view">
       <div v-for="student in students" :key="student.id" class="student-card">
         <div class="card-header">
-          <img :src="student.avatar || '/default-avatar.png'" :alt="student.fullName" />
+          <img
+            v-if="student.avatar && (!(_failed.has(student.avatar)) || _blobMap.value.has(student.avatar))"
+            :src="avatarSrc(student.avatar)"
+            :alt="student.fullName"
+            @error="onAvatarError($event, student.avatar)"
+          />
+          <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
           <span class="status-badge" :class="student.status">
             {{ getStatusLabel(student.status) }}
           </span>
@@ -216,7 +228,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   students: {
@@ -252,6 +265,41 @@ const emit = defineEmits([
 const viewMode = ref('table')
 const pageSize = ref(25)
 const selectedStudents = ref([])
+const _blobMap = ref(new Map())
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return ''
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    try { ev.target.style.display = 'none' } catch (e) {}
+    return
+  }
+  if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+  try {
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) {
+      _blobMap.value.set(url, b)
+      if (ev && ev.target) ev.target.src = b
+      return
+    }
+  } catch (e) {
+    _failed.value.add(url)
+  }
+  try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+}
+
+onBeforeUnmount(() => {
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
+})
 
 const isAllSelected = computed(() => {
   return props.students.length > 0 && selectedStudents.value.length === props.students.length

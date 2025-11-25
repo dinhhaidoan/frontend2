@@ -1,14 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import authService from '@/services/authService'
+import FallbackPage from '@/components/FallbackPage.vue'
 
 // Simple fallback component for pages without dedicated components
-const Fallback = {
-  template: `<div style="padding:24px; max-width:1100px; margin:0 auto">
-    <h2 style="margin:0 0 8px">{{ $route.name || $route.path.replace('/', '') }}</h2>
-    <p style="margin:0 0 16px;color:#6b7280">Nội dung demo cho trang <strong>{{ $route.name || $route.path.replace('/', '') }}</strong>.</p>
-    <div style="padding:16px;background:rgba(255,255,255,0.9);border-radius:12px;border:1px solid rgba(0,0,0,0.04)">Thêm component cụ thể vào <code>src/components</code> hoặc <code>src/pages</code> rồi cập nhật router.</div>
-  </div>`
-}
+const Fallback = FallbackPage
 
 // All routes use the Default layout as wrapper, with page content as dynamic component
 const routes = [
@@ -30,13 +26,18 @@ const routes = [
     children: [
       { 
         path: '', 
-        redirect: '/login'
+        name: 'home',
+        redirect: to => {
+          // Will be handled by router guard
+          return '/dashboard'
+        },
+        meta: { requiresAuth: true }
       },
       { path: 'dashboard', name: 'dashboard', component: () => import('../components/Dashboard-AD/Overview.vue').catch(() => Fallback) },
       { path: 'settings', name: 'settings', component: () => import('../views/share/Setting.vue').catch(() => Fallback) },
       
       // Admin routes
-      // Admin routes (menu: admin-dashboard, account-management, admin-notes, messages)
+      // Admin routes (menu: admin-dashboard, account-management, admin-notes)
       { 
         path: 'admin-dashboard', 
         name: 'admin-dashboard', 
@@ -98,6 +99,16 @@ const routes = [
           menu: { id: 'staff-notifications', label: 'Thông báo khoa', icon: 'fas fa-building' }
         } 
       },
+      {
+        path: 'staff-management',
+        name: 'staff-management',
+        component: () => import('../pages/Staff-Manager/StaffManager.vue').catch(() => Fallback),
+        meta: {
+          title: 'Quản lý giáo vụ khoa',
+          subtitle: 'Quản lý giáo vụ khoa - CRUD cơ bản',
+          menu: { id: 'staff-management', label: 'Quản lý giáo vụ khoa', icon: 'fas fa-user-tie' }
+        }
+      },
       { 
         path: 'teacher-notifications', 
         name: 'teacher-notifications', 
@@ -131,36 +142,12 @@ const routes = [
         } 
       },
 
-      // Messages (shared) - include admin menu meta for messages badge
-      { 
-        path: 'messages', 
-        name: 'messages', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tin nhắn', 
-          subtitle: 'Trò chuyện và giao tiếp với bạn bè, nhóm học tập',
-          menu: { id: 'messages', label: 'Tin nhắn nội bộ', icon: 'fas fa-comment', badge: 2 }
-        } 
-      },
-      // Messages - View specific chat
-      { 
-        path: 'messages/:chatId', 
-        name: 'messages-chat', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tin nhắn', 
-          subtitle: 'Trò chuyện và giao tiếp với bạn bè, nhóm học tập'
-        } 
-      },
-
       // Staff routes
       { path: 'staff-dashboard', name: 'staff-dashboard', component: () => import('../pages/Dashboard-Staff/StaffDashboard.vue').catch(() => Fallback), meta: { title: 'Bảng điều khiển Giáo vụ', subtitle: 'Quản lý công việc giáo vụ khoa CNTT' } },
       { path: 'staff-notes', name: 'staff-notes', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { title: 'Quản lý ghi chú', subtitle: 'Tạo và quản lý ghi chú công việc giáo vụ' } },
       { path: 'staff-notes/create', name: 'staff-notes-create', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'create', title: 'Tạo ghi chú mới' } },
       { path: 'staff-notes/:id', name: 'staff-notes-view', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'view', title: 'Xem ghi chú' } },
       { path: 'staff-notes/:id/edit', name: 'staff-notes-edit', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'edit', title: 'Chỉnh sửa ghi chú' } },
-      { path: 'staff-messages', name: 'staff-messages', component: () => import('../pages/Message/Message.vue').catch(() => Fallback), meta: { title: 'Tin nhắn công việc', subtitle: 'Giao tiếp nội bộ giáo vụ khoa' } },
-      { path: 'staff-messages/:chatId', name: 'staff-messages-chat', component: () => import('../pages/Message/Message.vue').catch(() => Fallback), meta: { title: 'Tin nhắn công việc', subtitle: 'Giao tiếp nội bộ giáo vụ khoa' } },
       { path: 'staff-accounts', name: 'staff-accounts', component: () => import('../pages/Account/Account.vue').catch(() => Fallback), meta: { title: 'Quản lý tài khoản khoa', subtitle: 'Quản lý tài khoản sinh viên và giảng viên khoa CNTT' } },
       { path: 'staff-frameworksubject', name: 'staff-frameworksubject', component: () => import('../pages/FrameworkSubject-Staff/FrameworkSubject.vue').catch(() => Fallback), meta: { title: 'Chương trình khung', subtitle: 'Quản lý chương trình khung môn học' } },
       { path: 'student-frameworksubject', name: 'student-frameworksubject', component: () => import('../pages/FrameworkSubject-Student/FrameworkSubjectPage.vue').catch(() => Fallback), meta: { title: 'Chương trình khung', subtitle: 'Xem chương trình khung môn học theo từng học kỳ' } },
@@ -187,127 +174,6 @@ const routes = [
       { path: 'notes/:id', name: 'notes-view', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'view', title: 'Xem ghi chú' } },
       { path: 'notes/:id/edit', name: 'notes-edit', component: () => import('../pages/Note/Note.vue').catch(() => Fallback), meta: { action: 'edit', title: 'Chỉnh sửa ghi chú' } },
       { path: 'schedule-students', name: 'schedule-students', component: () => import('../pages/Schedule-Students/Schedule.vue').catch(() => Fallback), meta: { title: 'Lịch học & lịch thi', subtitle: 'Xem lịch học và lịch thi cá nhân' } },
-
-
-      // Messages routes
-      { 
-        path: 'messages', 
-        name: 'messages', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tin nhắn', 
-          subtitle: 'Trò chuyện và giao tiếp với bạn bè, nhóm học tập' 
-        }
-      },
-      // Messages - View specific chat
-      { 
-        path: 'messages/:chatId', 
-        name: 'messages-chat', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tin nhắn', 
-          subtitle: 'Trò chuyện và giao tiếp với bạn bè, nhóm học tập' 
-        }
-      },
-      // Messages - New personal chat
-      { 
-        path: 'messages/new/personal', 
-        name: 'messages-new-personal', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tạo tin nhắn mới', 
-          subtitle: 'Bắt đầu cuộc trò chuyện mới với bạn bè',
-          action: 'create-personal'
-        }
-      },
-      // Messages - New group chat
-      { 
-        path: 'messages/new/group', 
-        name: 'messages-new-group', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tạo nhóm chat mới', 
-          subtitle: 'Tạo nhóm trò chuyện với nhiều thành viên',
-          action: 'create-group'
-        }
-      },
-      // Messages - New AI chat
-      { 
-        path: 'messages/new/ai', 
-        name: 'messages-new-ai', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Chat với AI', 
-          subtitle: 'Trò chuyện với trợ lý AI thông minh',
-          action: 'create-ai'
-        }
-      },
-      // Messages - Group settings
-      { 
-        path: 'messages/group/:groupId/settings', 
-        name: 'messages-group-settings', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Cài đặt nhóm', 
-          subtitle: 'Quản lý thông tin và thành viên nhóm',
-          action: 'group-settings'
-        }
-      },
-      // Messages - Search in chat
-      { 
-        path: 'messages/:chatId/search', 
-        name: 'messages-search', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tìm kiếm tin nhắn', 
-          subtitle: 'Tìm kiếm nội dung trong cuộc trò chuyện',
-          action: 'search'
-        }
-      },
-      // Messages - Shared files
-      { 
-        path: 'messages/:chatId/files', 
-        name: 'messages-files', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'File đã chia sẻ', 
-          subtitle: 'Xem tất cả file đã chia sẻ trong cuộc trò chuyện',
-          action: 'view-files'
-        }
-      },
-      // Messages - Pinned messages
-      { 
-        path: 'messages/:chatId/pinned', 
-        name: 'messages-pinned', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Tin nhắn đã ghim', 
-          subtitle: 'Xem tất cả tin nhắn quan trọng đã ghim',
-          action: 'view-pinned'
-        }
-      },
-      // Messages - Add members to group
-      { 
-        path: 'messages/group/:groupId/add-members', 
-        name: 'messages-add-members', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Thêm thành viên', 
-          subtitle: 'Mời thêm người vào nhóm trò chuyện',
-          action: 'add-members'
-        }
-      },
-      // Messages - View member profile
-      { 
-        path: 'messages/profile/:userId', 
-        name: 'messages-profile', 
-        component: () => import('../pages/Message/Message.vue').catch(() => Fallback), 
-        meta: { 
-          title: 'Thông tin thành viên', 
-          subtitle: 'Xem thông tin chi tiết và lịch sử trò chuyện',
-          action: 'view-profile'
-        }
-      },
     ]
   }
 ]
@@ -443,17 +309,6 @@ const ids = [
   'system-dashboard','permissions','data-management','system-config','security-logs','system-analytics','admin-forum','ai-admin'
 ]
 
-// Map internal-messages and admin-messages to the main messages route
-mainRoute.children.push({ 
-  path: 'internal-messages', 
-  redirect: '/messages'
-})
-
-mainRoute.children.push({ 
-  path: 'admin-messages', 
-  redirect: '/messages'
-})
-
 // Add these as children of the Default layout
 ids.forEach(id => {
   mainRoute.children.push({ path: id, name: id, component: Fallback })
@@ -464,27 +319,44 @@ const router = createRouter({
   routes
 })
 
-// Simple navigation guard for authentication
-router.beforeEach((to, from, next) => {
-  console.log('Router guard - navigating to:', to.path, 'from:', from.path)
+// Navigation guard for authentication
+router.beforeEach(async (to, from, next) => {
+  const savedUser = localStorage.getItem('auth_user')
+  const isAuthenticated = !!savedUser
   
-  // ALWAYS clear localStorage when going to login
+  // Redirect authenticated users away from login page
   if (to.path === '/login') {
-    console.log('Going to login - clearing all localStorage')
-    localStorage.clear() // Clear everything
+    if (isAuthenticated) {
+      try {
+        const user = JSON.parse(savedUser)
+        const store = useAuthStore()
+        return next(store.getDashboardRoute())
+      } catch (e) {
+        localStorage.removeItem('auth_user')
+        // After clearing invalid data, allow login
+        return next()
+      }
+    }
     return next()
   }
   
-  // For root, redirect to login
+  // Redirect root path based on auth status
   if (to.path === '/' || to.path === '') {
-    console.log('Root path, redirecting to login')
+    if (isAuthenticated) {
+      try {
+        const user = JSON.parse(savedUser)
+        const store = useAuthStore()
+        return next(store.getDashboardRoute())
+      } catch (e) {
+        localStorage.removeItem('auth_user')
+        return next('/login')
+      }
+    }
     return next('/login')
   }
   
-  // For all other routes, check authentication
-  const token = localStorage.getItem('auth_token')
-  if (!token) {
-    console.log('No token found, redirecting to login')
+  // Protect all other routes
+  if (!isAuthenticated) {
     return next('/login')
   }
   

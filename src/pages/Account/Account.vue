@@ -58,6 +58,8 @@
       :show="showCreateModal || showEditModal"
       :account="editingAccount"
       :saving="usersUpdating"
+      :uploading="uploadInProgress"
+      :upload-progress="uploadProgress"
       @close="closeModals"
       @save="saveAccount"
     />
@@ -235,6 +237,7 @@ import BulkActions from '@/components/Account/BulkActions.vue'
 import AccountModal from '@/components/Account/AccountModal.vue'
 import AccountViewModal from '@/components/Account/AccountViewModal.vue'
 import { useUsers } from '@/hooks/useUsers'
+import { uploadWithProgress, uploadImageToCloudinary } from '@/composables/useUploadWithProgress'
 import { useToast } from '@/composables/useToast'
 
 // Reactive data: only role + status
@@ -269,6 +272,9 @@ const deleteAccountModalVisible = ref(false)
 const accountToDelete = ref(null)
 const updateAccountModalVisible = ref(false)
 const accountToUpdate = ref(null)
+// upload progress state shared with AccountModal
+const uploadInProgress = ref(false)
+const uploadProgress = ref(0)
 
 // Accounts loaded from backend
 const accounts = ref([])
@@ -381,13 +387,11 @@ const toggleAccountStatus = async (account) => {
   const currentStatus = accounts.value[accountIndex].status === 'active'
   const desiredStatus = !currentStatus
 
-  const token = localStorage.getItem('auth_token')
-
   try {
-    // Backend expects is_active inside a user object
+    // Backend expects is_active inside a user object; auth is sent via cookie (credentials)
     const result = await updateUser(accounts.value[accountIndex].userId, { 
       user: { is_active: desiredStatus ? 1 : 0 } 
-    }, token)
+    })
 
     // Refresh from backend
     await loadAccounts(false)
@@ -420,11 +424,9 @@ const deleteAccount = (account) => {
 
 const confirmDeleteAccount = async () => {
   if (accountToDelete.value) {
-    const token = localStorage.getItem('auth_token')
-    
     try {
-      // Call backend to delete user
-      await deleteUser(accountToDelete.value.userId, token)
+      // Call backend to delete user (auth via cookie)
+      await deleteUser(accountToDelete.value.userId)
       
       // Refresh from backend to get updated list
       await loadAccounts(false)
@@ -521,11 +523,60 @@ const confirmUpdateAccount = async () => {
 
       
 
-      const token = localStorage.getItem('auth_token')
-      
       // Call backend to update user - use user_code as identifier
       try {
-        const result = await updateUser(accountToUpdate.value.userId, payload, token)
+        // If a new avatar file was selected in the modal, attempt to upload it first.
+        if (accountToUpdate.value && accountToUpdate.value.avatarFile) {
+          try {
+            uploadInProgress.value = true
+            uploadProgress.value = 0
+            const userCode = accountToUpdate.value.userId
+            const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
+            let API_BASE = String(_rawBase || '/api')
+            if (!API_BASE.includes('/api')) API_BASE = API_BASE.replace(/\/+$/, '') + '/api'
+            const uploadUrl = `${API_BASE.replace(/\/+$/,'')}/share/auth/users/${encodeURIComponent(userCode)}/avatar`
+            try {
+              const rj = await uploadWithProgress(uploadUrl, accountToUpdate.value.avatarFile, p => (uploadProgress.value = p), { fieldName: 'avatar' })
+              if (rj && rj.user) {
+                // attach returned avatar fields to the accountToUpdate so we can send them with update
+                accountToUpdate.value.user_avatar = rj.user.user_avatar || rj.user_avatar || accountToUpdate.value.user_avatar
+                accountToUpdate.value.user_avatar_public_id = rj.user.user_avatar_public_id || rj.user_avatar_public_id || accountToUpdate.value.user_avatar_public_id
+              }
+            } catch (err) {
+              const txt = (err && err.message) ? err.message : ''
+              if (txt && txt.startsWith('404')) {
+                // backend doesn't support avatar upload; fallback to Cloudinary
+                try {
+                  const cloud = await uploadImageToCloudinary(accountToUpdate.value.avatarFile, p => (uploadProgress.value = p))
+                  if (cloud) {
+                    accountToUpdate.value.user_avatar = cloud.secure_url
+                    accountToUpdate.value.user_avatar_public_id = cloud.public_id
+                  }
+                } catch (ce) {
+                  console.error('Cloudinary fallback failed', ce)
+                  throw ce
+                }
+              } else {
+                throw err
+              }
+            } finally {
+              uploadInProgress.value = false
+              uploadProgress.value = 0
+            }
+          } catch (e) {
+            error(e.message || 'Không thể upload avatar')
+            return
+          }
+        }
+
+        // If the upload produced an avatar url, attach it to payload.user
+        if (accountToUpdate.value && (accountToUpdate.value.user_avatar || accountToUpdate.value.user_avatar_public_id)) {
+          payload.user = payload.user || {}
+          if (accountToUpdate.value.user_avatar) payload.user.user_avatar = accountToUpdate.value.user_avatar
+          if (accountToUpdate.value.user_avatar_public_id) payload.user.user_avatar_public_id = accountToUpdate.value.user_avatar_public_id
+        }
+
+        const result = await updateUser(accountToUpdate.value.userId, payload)
         
         // Force refresh from backend to see if data was actually saved
         await loadAccounts(false)
@@ -660,8 +711,7 @@ const { success, error, warning } = useToast()
 
 const loadAccounts = async (showSuccessToast = true) => {
   try {
-    const token = localStorage.getItem('auth_token')
-    await fetchUsers(token)
+    await fetchUsers()
     // hydrate local mapped accounts from hook
     accounts.value = hookAccounts.value
     

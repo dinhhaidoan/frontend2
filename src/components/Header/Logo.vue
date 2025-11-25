@@ -24,9 +24,37 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useUsers } from '@/hooks/useUsers'
 
-const userName = ref('Hồ Thị Ngọc Huyền')
+const authStore = useAuthStore()
+const { accounts, fetchUsers } = useUsers()
+const currentAccount = ref(null)
+
+const user = computed(() => currentAccount.value || authStore.user)
+const userName = computed(() => user.value?.name || user.value?.user_fullname || user.value?.user_name || user.value?.user_code || 'Người dùng')
+
+onMounted(async () => {
+  try {
+    if (authStore.user) {
+      await fetchUsers()
+      const code = authStore.user?.user_code || authStore.user?.userId || authStore.user?.id
+      const found = accounts.value.find(a => a.userId === code || String(a.id) === String(authStore.user?.id))
+      if (found) currentAccount.value = found
+    }
+  } catch (err) {
+    // ignore - keep fallback to authStore
+    console.warn('Logo: could not fetch users to resolve name', err)
+  }
+})
+
+watch(accounts, (newAccounts) => {
+  if (!newAccounts || !Array.isArray(newAccounts)) return
+  const code = authStore.user?.user_code || authStore.user?.userId || authStore.user?.id
+  const found = newAccounts.find(a => a.userId === code || String(a.id) === String(authStore.user?.id))
+  if (found) currentAccount.value = found
+})
 </script>
 
 <style scoped>

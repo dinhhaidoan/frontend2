@@ -9,7 +9,9 @@ export function useAuth() {
 
   // Check if user is authenticated
   const isAuthenticated = () => {
-    return !!token.value && !!user.value
+    // When backend uses HttpOnly cookie, token may not be stored in frontend.
+    // Treat presence of `user` as the primary indicator of an authenticated session.
+    return !!user.value
   }
 
   // Get user role (always return a role name string when possible)
@@ -42,12 +44,18 @@ export function useAuth() {
   const loadUserFromStorage = () => {
     isLoading.value = true
     try {
-      const savedToken = localStorage.getItem('auth_token')
+      const savedToken = localStorage.getItem('token') || localStorage.getItem('auth_token')
       const savedUser = localStorage.getItem('auth_user')
       
-      if (savedToken && savedUser) {
-        token.value = savedToken
+      // Accept loading if we have either saved user or saved token.
+      if (savedUser) {
         user.value = JSON.parse(savedUser)
+        if (savedToken) {
+          token.value = savedToken
+          // Ensure token is in both storage keys
+          localStorage.setItem('token', savedToken)
+          localStorage.setItem('auth_token', savedToken)
+        }
         return true
       }
     } catch (error) {
@@ -61,7 +69,14 @@ export function useAuth() {
 
   // Save user to localStorage
   const saveUserToStorage = (userData, authToken) => {
-    localStorage.setItem('auth_token', authToken)
+    // Save token to both keys for compatibility
+    if (authToken) {
+      localStorage.setItem('auth_token', authToken)
+      localStorage.setItem('token', authToken) // For Socket.IO
+    } else {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('token')
+    }
     localStorage.setItem('auth_user', JSON.stringify(userData))
   }
 
@@ -71,6 +86,7 @@ export function useAuth() {
     token.value = null
     localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_user')
+    localStorage.removeItem('token') // Remove Socket.IO token
   }
 
   // Login function
@@ -83,9 +99,17 @@ export function useAuth() {
       const result = await authService.login(user_code, user_password)
 
       // Store authentication data
-      user.value = result.user
-      token.value = result.token
-      saveUserToStorage(result.user, result.token)
+      user.value = result.user || result?.data?.user || null
+
+      // Backend now returns token in response body for Socket.IO
+      if (result.token) {
+        token.value = result.token
+        // Save token to localStorage for Socket.IO authentication
+        localStorage.setItem('token', result.token)
+        console.log('✅ Token saved to localStorage for Socket.IO')
+      }
+
+      saveUserToStorage(user.value, result.token)
 
       return result
     } catch (err) {
@@ -99,9 +123,8 @@ export function useAuth() {
   // Logout function
   const logout = async () => {
     try {
-      if (token.value) {
-        await authService.logout(token.value)
-      }
+      // Server clears cookie-based session. No token required from client.
+      await authService.logout()
     } catch (err) {
       console.error('Logout error:', err)
     } finally {

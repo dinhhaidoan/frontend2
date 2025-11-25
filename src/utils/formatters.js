@@ -309,3 +309,84 @@ export function getStatusColor(status) {
   }
   return colorMap[status] || 'secondary'
 }
+
+/**
+ * Get user display name from user object based on role
+ * @param {Object} userInfo - User object from backend
+ * @returns {string}
+ */
+export function getUserDisplayName(userInfo) {
+  if (!userInfo) return 'Unknown User'
+  
+  // Try to get name from role-specific fields
+  return userInfo.full_name || 
+         userInfo.user_name ||
+         userInfo.Teacher?.teacher_name ||
+         userInfo.Staff?.staff_name ||
+         userInfo.Admin?.admin_name ||
+         userInfo.Student?.student_name ||
+         userInfo.user_code ||
+         `User ${userInfo.user_id || ''}`
+}
+
+/**
+ * Get user avatar URL from user object using common backend fields
+ * @param {Object} userInfo
+ * @returns {string|null}
+ */
+export function getUserAvatar(userInfo) {
+  if (!userInfo) return null
+  // Helper: recursively search object for avatar-like keys
+  const findAvatar = (obj, depth = 0) => {
+    if (!obj || depth > 5) return null
+    if (typeof obj === 'string') {
+      const s = obj.trim()
+      return s || null
+    }
+
+    if (typeof obj !== 'object') return null
+
+    // check direct keys first
+    for (const key of Object.keys(obj)) {
+      const val = obj[key]
+      const k = String(key).toLowerCase()
+      if (k.includes('avatar') || k.includes('user_avatar')) {
+        if (typeof val === 'string' && val.trim()) return val.trim()
+      }
+    }
+
+    // then descend into nested objects
+    for (const key of Object.keys(obj)) {
+      const val = obj[key]
+      if (typeof val === 'object' && val !== null) {
+        const found = findAvatar(val, depth + 1)
+        if (found) return found
+      }
+    }
+
+    return null
+  }
+
+  const raw = findAvatar(userInfo)
+  if (!raw) return null
+
+  // Normalize URL formats
+  try {
+    const trimmed = String(raw).trim()
+    if (!trimmed) return null
+    if (/^https?:\/\//i.test(trimmed)) return trimmed
+    if (/^\/\//.test(trimmed)) return `https:${trimmed}`
+    const base = (import.meta.env && import.meta.env.VITE_API_BASE_URL) ? import.meta.env.VITE_API_BASE_URL : ''
+    if (base) {
+      return `${base.replace(/\/+$/,'')}/${trimmed.replace(/^\/+/, '')}`
+    }
+    // If no API base configured, ensure the returned path is absolute
+    if (!/^[\/:]/.test(trimmed)) {
+      return `/${trimmed.replace(/^\/+/, '')}`
+    }
+    return trimmed
+  } catch (err) {
+    console.warn('getUserAvatar: failed to normalize avatar url', err)
+    return String(raw)
+  }
+}

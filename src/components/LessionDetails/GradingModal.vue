@@ -78,7 +78,7 @@
             :class="['submission-item', { graded: submission.score !== null }]"
           >
             <div class="student-info">
-              <img :src="submission.avatar" :alt="submission.studentName" class="student-avatar" />
+              <img :src="avatarSrc(submission.avatar)" :alt="submission.studentName" class="student-avatar" @error="onAvatarError($event, submission.avatar)" />
               <div class="student-details">
                 <span class="student-name">{{ submission.studentName }}</span>
                 <span class="student-id">MSSV: {{ submission.studentId }}</span>
@@ -227,7 +227,7 @@
                   class="graded-student-item"
                 >
                   <span class="student-info-compact">
-                    <img :src="submission.avatar" :alt="submission.studentName" class="avatar-mini" />
+                    <img :src="avatarSrc(submission.avatar)" :alt="submission.studentName" class="avatar-mini" @error="onAvatarError($event, submission.avatar)" />
                     {{ submission.studentName }}
                   </span>
                   <span class="score-display">{{ submission.score }}/{{ assignment.maxScore }}</span>
@@ -424,7 +424,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   assignment: {
@@ -799,6 +800,29 @@ const getMockCodeContent = (fileName) => {
 
 console.log("File content preview");`
 }
+
+// avatar fallback helpers
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return '/default-avatar.png'
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+})
 
 </script>
 

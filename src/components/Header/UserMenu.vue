@@ -4,10 +4,11 @@
     <div class="dropdown-container" @click="toggleDropdown">
       <div class="user-info group">
         <div class="user-avatar-container">
-          <img 
-            :src="userAvatar" 
-            alt="User Avatar" 
+          <img
+            :src="avatarSrc(userAvatar)"
+            alt="User Avatar"
             class="user-avatar"
+            @error="onAvatarError($event, userAvatar)"
           />
           <div class="status-indicator"></div>
         </div>
@@ -27,7 +28,7 @@
           <div class="user-header">
             <div class="user-header-content">
               <div class="user-avatar-large">
-                <img :src="userAvatar" alt="User Avatar" />
+                <img :src="avatarSrc(userAvatar)" alt="User Avatar" @error="onAvatarError($event, userAvatar)" />
                 <div class="avatar-ring"></div>
               </div>
               <div class="user-info-detailed">
@@ -127,7 +128,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -243,8 +245,9 @@ onMounted(() => {
   // Fetch latest user list and pick current user record when token is present
   ;(async () => {
     try {
-      if (authStore.token) {
-        await fetchUsers(authStore.token)
+      // If we have a logged-in user (cookie-based or token-based), fetch users
+      if (authStore.user) {
+        await fetchUsers()
         // Find matching user by user_code or userId
         const code = authStore.user?.user_code || authStore.user?.userId || authStore.user?.userId
         const found = accounts.value.find(a => a.userId === code || String(a.id) === String(authStore.user?.id))
@@ -259,6 +262,43 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
+})
+
+// small local fallback cache for avatar blob urls
+const _blobMap = ref(new Map())
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return ''
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    try { ev.target.style.display = 'none' } catch (e) {}
+    return
+  }
+  if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+  try {
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) {
+      _blobMap.value.set(url, b)
+      if (ev && ev.target) ev.target.src = b
+      return
+    }
+  } catch (e) {
+    _failed.value.add(url)
+  }
+  try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+}
+
+onBeforeUnmount(() => {
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
 })
 
 // React to accounts updates (in case fetchUsers completes after mount)

@@ -1,3 +1,4 @@
+ 
 <template>
   <div class="admin-dashboard">
     <!-- Welcome Section -->
@@ -236,7 +237,7 @@
             <div class="messages-list">
               <div v-for="message in recentMessages" :key="message.id" class="message-item" @click="openMessage(message.id)">
                 <div class="message-avatar">
-                  <img :src="message.sender.avatar || getDefaultAvatar(message.sender.name)" :alt="message.sender.name">
+                  <img :src="avatarSrc(message.sender.avatar) || getDefaultAvatar(message.sender.name)" :alt="message.sender.name" @error="onAvatarError($event, message.sender.avatar)" />
                 </div>
                 <div class="message-content">
                   <div class="message-header">
@@ -303,7 +304,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -438,6 +440,29 @@ const openMessage = (messageId) => {
 const getDefaultAvatar = (name) => {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff`
 }
+
+// avatar fallback helpers
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return null
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+})
 </script>
 
 <style scoped>

@@ -16,7 +16,12 @@
           <!-- Profile Header -->
           <div class="profile-header">
             <div class="avatar">
-              <img v-if="teacher?.avatar" :src="teacher.avatar" :alt="teacher?.name" />
+              <img
+                v-if="teacher?.avatar && (!(_failed && _failed.has && _failed.has(teacher.avatar)) || (_blobMap && _blobMap.value && _blobMap.value.has(teacher.avatar)))"
+                :src="avatarSrc(teacher.avatar)"
+                :alt="teacher?.name"
+                @error="onAvatarError($event, teacher.avatar)"
+              />
               <i v-else class="fas fa-user"></i>
             </div>
             <div class="basic-info">
@@ -303,7 +308,8 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 export default {
   name: 'TeacherViewModal',
@@ -320,6 +326,35 @@ export default {
   emits: ['close', 'edit'],
   setup(props, { emit }) {
     const activeTab = ref('personal')
+    // avatar fallback state
+    const _blobMap = ref(new Map())
+    const _failed = ref(new Set())
+
+    const avatarSrc = (url) => {
+      if (!url) return ''
+      return _blobMap.value.has(url) ? _blobMap.value.get(url) : url
+    }
+
+    const onAvatarError = async (ev, url) => {
+      if (!url) return
+      try {
+        if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+          _failed.value.add(url)
+          if (ev && ev.target) ev.target.style.display = 'none'
+          return
+        }
+        if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+        const b = await fetchImageAsBlobUrl(url)
+        if (b) {
+          _blobMap.value.set(url, b)
+          if (ev && ev.target) ev.target.src = b
+          return
+        }
+      } catch (e) {
+        _failed.value.add(url)
+      }
+      try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+    }
     const selectedWeek = ref('current')
     const teacherSubjects = ref([])
     const teacherClasses = ref([])
@@ -478,6 +513,12 @@ export default {
         loadTeacherData()
       }
     })
+
+    onBeforeUnmount(() => {
+      for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+      _blobMap.value.clear()
+      _failed.value.clear()
+    })
     
     return {
       activeTab,
@@ -488,6 +529,8 @@ export default {
       tabs,
       weekDays,
       handleOverlayClick,
+      avatarSrc,
+      onAvatarError,
       getStatusName,
       getStatusIcon,
       getDepartmentName,

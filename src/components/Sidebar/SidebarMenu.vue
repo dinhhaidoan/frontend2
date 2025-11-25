@@ -116,12 +116,6 @@ const menuItemsByRole = {
       icon: 'fas fa-code',
     },
     {
-      id: 'messages',
-      label: ' Tin nhắn',
-      icon: 'fas fa-comment',
-      badge: 5
-    },
-    {
       id: 'ai-students',
       label: ' AI Trợ lý học tập',
       icon: 'fas fa-robot'
@@ -174,12 +168,6 @@ const menuItemsByRole = {
       id: 'code-environment',
       label: 'Môi trường code',
       icon: 'fas fa-code',
-    },
-    {
-      id: 'messages',
-      label: 'Tin nhắn',
-      icon: 'fas fa-comment',
-      badge: 8
     },
     {
       id: 'teacher-notifications',
@@ -246,12 +234,6 @@ const menuItemsByRole = {
       icon: 'fas fa-chart-bar'
     },
     {
-      id: 'messages',
-      label: 'Tin nhắn',
-      icon: 'fas fa-comment',
-      badge: 4
-    },
-    {
       id: 'staff-notifications',
       label: 'Thông báo',
       icon: 'fas fa-bullhorn'
@@ -275,16 +257,14 @@ const menuItemsByRole = {
       label: 'Quản lý tài khoản',
       icon: 'fas fa-users'
     },
+    { id: 'staff-management',
+      label: 'Quản lý giáo vụ khoa',
+      icon: 'fas fa-user-tie'
+    },
     {
       id: 'admin-notes',
       label: 'Ghi chú',
       icon: 'fas fa-sticky-note',
-    },
-    {
-      id: 'messages',
-      label: 'Tin nhắn',
-      icon: 'fas fa-comment',
-      badge: 2
     },
     {
       id: 'admin-notifications',

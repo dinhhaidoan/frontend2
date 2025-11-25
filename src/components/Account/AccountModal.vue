@@ -1,14 +1,32 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="$emit('close')">
+  <div v-if="show" class="modal-overlay" @click="(props.uploading || props.saving) ? null : $emit('close')">
     <div class="modal-content" @click.stop>
-      <div class="modal-header">
+        <div class="modal-header">
         <h3>{{ isEdit ? 'Chỉnh sửa tài khoản' : 'Tạo tài khoản mới' }}</h3>
-        <button @click="$emit('close')" class="modal-close">
+        <button @click="(props.uploading || props.saving) ? null : $emit('close')" class="modal-close" :disabled="props.uploading || props.saving">
           <i class="fas fa-times"></i>
         </button>
       </div>
       
       <form @submit.prevent="handleSubmit" class="account-form">
+        <div class="avatar-row" style="display:flex;gap:16px;align-items:center;margin-bottom:12px;">
+          <div style="width:96px;height:96px;border-radius:12px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.08);background:#f3f4f6;display:flex;align-items:center;justify-content:center;">
+            <img v-if="avatarPreview" :src="avatarPreview" style="width:100%;height:100%;object-fit:cover;display:block;" />
+            <div v-else style="font-weight:700;color:#fff;background:linear-gradient(135deg,#3b82f6,#8b5cf6);width:100%;height:100%;display:flex;align-items:center;justify-content:center;">{{ (formData.name||'').split(' ').map(n=>n[0]).join('').toUpperCase() }}</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <label class="btn-secondary" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="file" accept="image/*" @change="handleFileSelected" style="display:none" />
+                <i class="fas fa-upload"></i> Chọn ảnh đại diện
+              </label>
+              <small style="display:block;color:#6b7280;margin-top:6px">Kích thước tối đa 5MB. Định dạng: jpg/png.</small>
+            </div>
+            <div v-if="props.uploading" style="height:10px;background:#e6eefb;border-radius:8px;overflow:hidden;margin-top:6px">
+              <div :style="{ width: props.uploadProgress + '%', background: 'linear-gradient(90deg,#3b82f6,#8b5cf6)', height: '100%' }"></div>
+            </div>
+          </div>
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <label>Họ tên *</label>
@@ -65,10 +83,10 @@
         </div>
         
         <div class="form-actions">
-          <button type="button" @click="$emit('close')" class="btn-secondary" :disabled="props.saving">Hủy</button>
-          <button type="submit" class="btn-primary" :disabled="props.saving">
-            <i v-if="props.saving" class="fas fa-spinner fa-spin" style="margin-right:8px"></i>
-            {{ props.saving ? (isEdit ? 'Đang cập nhật...' : 'Đang tạo...') : (isEdit ? 'Cập nhật' : 'Tạo tài khoản') }}
+          <button type="button" @click="$emit('close')" class="btn-secondary" :disabled="props.saving || props.uploading">Hủy</button>
+          <button type="submit" class="btn-primary" :disabled="props.saving || props.uploading">
+            <i v-if="props.saving || props.uploading" class="fas fa-spinner fa-spin" style="margin-right:8px"></i>
+            {{ (props.saving || props.uploading) ? (isEdit ? 'Đang cập nhật...' : 'Đang tạo...') : (isEdit ? 'Cập nhật' : 'Tạo tài khoản') }}
           </button>
         </div>
       </form>
@@ -94,6 +112,14 @@ const props = defineProps({
     type: Boolean,
     default: false
   }
+  ,uploading: {
+    type: Boolean,
+    default: false
+  },
+  uploadProgress: {
+    type: Number,
+    default: 0
+  }
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -102,6 +128,9 @@ const emit = defineEmits(['close', 'save'])
 useModalBodyScroll(toRef(props, 'show'))
 
 const showPassword = ref(false)
+// local avatar preview + file
+const avatarPreview = ref(null)
+const avatarFile = ref(null)
 
 const formData = reactive(createEmptyAccount())
 
@@ -114,6 +143,8 @@ const resetForm = () => {
     formData[key] = empty[key]
   })
   showPassword.value = false
+  avatarPreview.value = null
+  avatarFile.value = null
 }
 
 // Watch for account changes to populate form
@@ -121,6 +152,8 @@ watch(() => props.account, (newAccount) => {
   if (newAccount) {
     isEdit.value = true
     Object.assign(formData, newAccount)
+    // set preview if avatar URL present
+    avatarPreview.value = newAccount.avatar || newAccount.user_avatar || null
   } else {
     isEdit.value = false
     resetForm()
@@ -148,11 +181,33 @@ const handleSubmit = () => {
     ...formData,
     status: formData.status || 'active',
     lastLogin: formData.lastLogin || new Date(),
-    avatar: formData.avatar || null
+    avatar: formData.avatar || null,
+    // include file object if user selected a new avatar
+    avatarFile: avatarFile.value || null
   }
   
   emit('save', accountData)
   emit('close')
+}
+
+const handleFileSelected = (e) => {
+  const f = e.target.files && e.target.files[0]
+  if (!f) return
+  // basic client-side validation: image and < 5MB
+  if (!f.type.startsWith('image/')) {
+    alert('Vui lòng chọn file ảnh hợp lệ')
+    return
+  }
+  if (f.size > 5 * 1024 * 1024) {
+    alert('Kích thước ảnh quá lớn (tối đa 5MB)')
+    return
+  }
+  avatarFile.value = f
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    avatarPreview.value = ev.target.result
+  }
+  reader.readAsDataURL(f)
 }
 </script>
 
@@ -169,7 +224,8 @@ const handleSubmit = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  /* must be above header (z-index:99999) so modal overlays are always on top */
+  z-index: 100000 !important;
   animation: fadeIn 0.3s ease;
   overflow: hidden !important;
   padding: 20px;

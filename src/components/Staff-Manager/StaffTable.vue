@@ -2,7 +2,7 @@
   <div class="teacher-table">
     <div class="table-header">
       <div class="table-title">
-        <h3>Danh sách giảng viên ({{ filteredTeachers.length }})</h3>
+        <h3>Danh sách giáo vụ ({{ filteredTeachers.length }})</h3>
         <div class="table-actions">
           <button @click="$emit('export')" class="btn-export">
             <i class="fas fa-download"></i>
@@ -16,127 +16,81 @@
       <table class="teachers-table">
         <thead>
           <tr>
-            <th>
-              <input 
-                type="checkbox" 
-                :checked="isAllSelected"
-                @change="toggleSelectAll"
-              />
-            </th>
-            <th>Mã GV</th>
-            <th>Họ tên</th>
-            <th>Khoa/Bộ môn</th>
-            <th>Học hàm học vị</th>
+            <th>Mã giáo vụ</th>
+            <th>Họ và tên</th>
+            <th>Ngày sinh</th>
+            <th>Giới tính</th>
             <th>Email</th>
             <th>SĐT</th>
-            <th>Trạng thái</th>
-            <th>Môn dạy</th>
-            <th>Lớp phụ trách</th>
+            <th>Vai trò</th>
+            <th>Trạng thái TK</th>
             <th>Thao tác</th>
           </tr>
         </thead>
         <tbody>
           <tr 
-            v-for="teacher in paginatedTeachers" 
-            :key="teacher.id"
-            :class="{ 'selected': selectedTeachers.includes(teacher.id) }"
+            v-for="staff in paginatedTeachers" 
+            :key="staff.id"
           >
             <td>
-              <input 
-                type="checkbox" 
-                :value="teacher.id"
-                :checked="selectedTeachers.includes(teacher.id)"
-                @change="toggleTeacherSelection(teacher.id)"
-              />
-            </td>
-            <td>
-              <span class="teacher-code">{{ teacher.code }}</span>
+              <span class="teacher-code">{{ staff.code }}</span>
             </td>
             <td>
               <div class="teacher-name">
                 <div class="avatar">
                   <img
-                    v-if="teacher.avatar && (!this._failed.has(teacher.avatar) || this._blobMap.has(teacher.avatar))"
-                    :src="avatarSrc(teacher.avatar)"
-                    :alt="teacher.name"
-                    @error="onAvatarError($event, teacher.avatar)"
+                    v-if="staff.avatar && (!(_failed && _failed.has && _failed.has(staff.avatar)) || (_blobMap && _blobMap.has && _blobMap.has(staff.avatar)))"
+                    :src="avatarSrc(staff.avatar)"
+                    :alt="staff.name"
+                    @error="onAvatarError($event, staff.avatar)"
                   />
                   <i v-else class="fas fa-user"></i>
                 </div>
-                <div class="name-info">
-                  <strong>{{ teacher.name }}</strong>
-                  <small v-if="teacher.position">{{ teacher.position }}</small>
-                </div>
+                <strong>{{ staff.name }}</strong>
               </div>
             </td>
             <td>
-              <span class="department">{{ getDepartmentName(teacher.department) }}</span>
+              <span class="birth-date">{{ formatDate(staff.birthDate) }}</span>
             </td>
             <td>
-              <span class="academic-rank" :class="teacher.academicRank">
-                {{ getAcademicRankName(teacher.academicRank) }}
-              </span>
+              <span class="gender">{{ getGenderName(staff.gender) }}</span>
             </td>
             <td>
-              <a :href="`mailto:${teacher.email}`" class="email-link">
-                {{ teacher.email }}
+              <a :href="`mailto:${staff.email}`" class="email-link">
+                {{ staff.email }}
               </a>
             </td>
             <td>
-              <span class="phone">{{ teacher.phone || '-' }}</span>
+              <span class="phone">{{ staff.phone || '-' }}</span>
             </td>
             <td>
-              <span class="status" :class="teacher.status">
-                <i :class="getStatusIcon(teacher.status)"></i>
-                {{ getStatusName(teacher.status) }}
+              <span class="role-badge" :class="staff.role">
+                {{ getRoleName(staff.role) }}
               </span>
             </td>
             <td>
-              <div class="subject-count">
-                <span class="count">{{ teacher.subjectCount || 0 }}</span>
-                <small>môn</small>
-              </div>
-            </td>
-            <td>
-              <div class="class-count">
-                <span class="count">{{ teacher.classCount || 0 }}</span>
-                <small>lớp</small>
-              </div>
+              <span class="account-status" :class="staff.accountStatus">
+                {{ getAccountStatusName(staff.accountStatus) }}
+              </span>
             </td>
             <td>
               <div class="action-buttons">
                 <button 
-                  @click="$emit('view', teacher)" 
+                  @click="$emit('view', staff)" 
                   class="btn-action view"
                   title="Xem chi tiết"
                 >
                   <i class="fas fa-eye"></i>
                 </button>
                 <button 
-                  @click="$emit('edit', teacher)" 
+                  @click="$emit('edit', staff)" 
                   class="btn-action edit"
                   title="Chỉnh sửa"
                 >
                   <i class="fas fa-edit"></i>
                 </button>
                 <button 
-                  v-if="teacher.status === 'active'"
-                  @click="$emit('suspend', teacher)" 
-                  class="btn-action suspend"
-                  title="Tạm khóa"
-                >
-                  <i class="fas fa-pause"></i>
-                </button>
-                <button 
-                  v-else-if="teacher.status === 'on-break'"
-                  @click="$emit('activate', teacher)" 
-                  class="btn-action activate"
-                  title="Kích hoạt"
-                >
-                  <i class="fas fa-play"></i>
-                </button>
-                <button 
-                  @click="$emit('delete', teacher)" 
+                  @click="$emit('delete', staff)" 
                   class="btn-action delete"
                   title="Xóa"
                 >
@@ -151,8 +105,8 @@
       <!-- Empty State -->
       <div v-if="filteredTeachers.length === 0" class="empty-state">
         <i class="fas fa-chalkboard-teacher"></i>
-        <h3>Không tìm thấy giảng viên</h3>
-        <p>Không có giảng viên nào phù hợp với bộ lọc hiện tại</p>
+        <h3>Không tìm thấy giáo vụ</h3>
+        <p>Không có giáo vụ nào phù hợp với bộ lọc hiện tại</p>
       </div>
     </div>
     
@@ -194,7 +148,7 @@
 <script>
 import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 export default {
-  name: 'TeacherTable',
+  name: 'StaffTable',
   props: {
     teachers: {
       type: Array,
@@ -223,104 +177,55 @@ export default {
       _failed: new Set()
     }
   },
-  emits: ['selection-change', 'page-change', 'view', 'edit', 'delete', 'suspend', 'activate', 'export'],
+  emits: ['selection-change','page-change','view','edit','delete','suspend','activate','export'],
   computed: {
     totalPages() {
-      return Math.ceil(this.filteredTeachers.length / this.pageSize)
+      return Math.max(1, Math.ceil(this.filteredTeachers.length / this.pageSize))
     },
-    
     paginatedTeachers() {
       const start = (this.currentPage - 1) * this.pageSize
-      const end = start + this.pageSize
-      return this.filteredTeachers.slice(start, end)
+      return this.filteredTeachers.slice(start, start + this.pageSize)
     },
-    
     isAllSelected() {
-      return this.paginatedTeachers.length > 0 && 
-             this.paginatedTeachers.every(teacher => this.selectedTeachers.includes(teacher.id))
+      return this.paginatedTeachers.every(t => this.selectedTeachers.includes(t.id))
     },
-    
     visiblePages() {
       const pages = []
-      const start = Math.max(1, this.currentPage - 2)
-      const end = Math.min(this.totalPages, this.currentPage + 2)
-      
-      for (let i = start; i <= end; i++) {
-        pages.push(i)
-      }
-      
+      for (let i = 1; i <= this.totalPages; i++) pages.push(i)
       return pages
     }
   },
   methods: {
-    toggleSelectAll() {
-      if (this.isAllSelected) {
-        const newSelection = this.selectedTeachers.filter(id => 
-          !this.paginatedTeachers.some(teacher => teacher.id === id)
-        )
-        this.$emit('selection-change', newSelection)
-      } else {
-        const pageIds = this.paginatedTeachers.map(teacher => teacher.id)
-        const newSelection = [...new Set([...this.selectedTeachers, ...pageIds])]
-        this.$emit('selection-change', newSelection)
-      }
-    },
-    
-    toggleTeacherSelection(teacherId) {
-      const newSelection = this.selectedTeachers.includes(teacherId)
-        ? this.selectedTeachers.filter(id => id !== teacherId)
-        : [...this.selectedTeachers, teacherId]
-      
-      this.$emit('selection-change', newSelection)
-    },
-    
     changePage(page) {
-      if (page >= 1 && page <= this.totalPages) {
-        this.$emit('page-change', page)
-      }
+      if (page < 1 || page > this.totalPages) return
+      this.$emit('page-change', page)
     },
-    
-    getDepartmentName(department) {
-      const departments = {
-        'cntt': 'Công nghệ thông tin',
-        'dtvt': 'Điện tử viễn thông',
-        'kt': 'Kinh tế',
-        'nn': 'Ngoại ngữ',
-        'co-khi': 'Cơ khí'
-      }
-      return departments[department] || department
+    formatDate(date) {
+      if (!date) return '-'
+      const d = new Date(date)
+      return d.toLocaleDateString('vi-VN')
     },
-    
-    getAcademicRankName(rank) {
-      const ranks = {
-        'gs': 'Giáo sư',
-        'pgs': 'Phó giáo sư',
-        'ts': 'Tiến sĩ',
-        'ths': 'Thạc sĩ',
-        'ksh': 'Kỹ sư',
-        'cn': 'Cử nhân'
-      }
-      return ranks[rank] || rank
+    getGenderName(gender) {
+      const map = { male: 'Nam', female: 'Nữ', other: 'Khác' }
+      return map[gender] || '-'
     },
-    
-    getStatusName(status) {
-      const statuses = {
-        'active': 'Đang giảng dạy',
-        'on-break': 'Tạm nghỉ',
-        'resigned': 'Nghỉ việc'
+    getRoleName(role) {
+      const map = {
+        admin: 'Quản trị viên',
+        staff: 'Giáo vụ',
+        teacher: 'Giảng viên',
+        student: 'Sinh viên'
       }
-      return statuses[status] || status
+      return map[role] || '-'
     },
-    
-    getStatusIcon(status) {
-      const icons = {
-        'active': 'fas fa-check-circle',
-        'on-break': 'fas fa-pause-circle',
-        'resigned': 'fas fa-times-circle'
+    getAccountStatusName(status) {
+      const map = {
+        active: 'Hoạt động',
+        inactive: 'Đã khóa',
+        pending: 'Chờ kích hoạt'
       }
-      return icons[status] || 'fas fa-question-circle'
-    }
-    ,
+      return map[status] || '-'
+    },
     avatarSrc(url) {
       if (!url) return ''
       return this._blobMap && this._blobMap.has(url) ? this._blobMap.get(url) : url
@@ -348,22 +253,18 @@ export default {
       }
       try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
     }
-  }
-  ,
+  },
   beforeUnmount() {
     for (const v of this._blobMap.values()) revokeBlobUrl(v)
     this._blobMap.clear()
     this._failed.clear()
-  }
+  },
 }
 </script>
 
 <style scoped>
 .teacher-table {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
   border-radius: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
@@ -581,6 +482,63 @@ export default {
 .class-count small {
   color: #6b7280;
   font-size: 11px;
+}
+
+.role-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.role-badge.admin {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.role-badge.staff {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.role-badge.teacher {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.role-badge.student {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.account-status {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.account-status.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.account-status.inactive {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.account-status.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.birth-date,
+.gender {
+  color: #374151;
+  font-size: 14px;
 }
 
 .action-buttons {

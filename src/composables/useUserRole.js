@@ -28,29 +28,23 @@ const verifyRoleWithBackend = async () => {
   if (!authStore.isAuthenticated()) {
     return null
   }
-  
+
   try {
-    // Call backend to verify current user's role
-    const token = authStore.token
-    if (token) {
-      // You can call a dedicated endpoint to verify user role
-      // For now, trust the stored user data but log it
-      const currentRole = authStore.getUserRole()
-      
-      verifiedRole.value = currentRole
-      isRoleVerified.value = true
-      
-      // If role doesn't match expected admin, log warning
-      if (currentRole !== ROLES.ADMIN && authStore.user?.role_id === 4) {
-        console.warn('⚠️ Role mismatch detected! Expected admin but got:', currentRole)
-      }
-      
-      return currentRole
+    // For now we rely on stored user data for role. If needed, add a server
+    // verification endpoint and call it here using credentials.
+    const currentRole = authStore.getUserRole()
+    verifiedRole.value = currentRole
+    isRoleVerified.value = true
+
+    if (currentRole !== ROLES.ADMIN && authStore.user?.role_id === 4) {
+      console.warn('⚠️ Role mismatch detected! Expected admin but got:', currentRole)
     }
+
+    return currentRole
   } catch (error) {
     console.error('❌ Role verification failed:', error)
   }
-  
+
   return null
 }
 

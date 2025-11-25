@@ -5,7 +5,11 @@
 
 import { normalizeNote, toBackendNote } from '@/types/note'
 
-const API_BASE_URL = 'http://localhost:3000/api'
+const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
+let API_BASE_URL = String(_rawBase || '/api')
+if (!API_BASE_URL.includes('/api')) {
+  API_BASE_URL = API_BASE_URL.replace(/\/+$/, '') + '/api'
+}
 
 class NotesService {
   /**

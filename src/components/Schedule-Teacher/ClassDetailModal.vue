@@ -84,7 +84,7 @@
                   :key="student.id"
                   class="student-item"
                 >
-                  <img :src="student.avatar" :alt="student.name" class="student-avatar">
+                  <img :src="avatarSrc(student.avatar)" :alt="student.name" class="student-avatar" @error="onAvatarError($event, student.avatar)">
                   <div class="student-info">
                     <div class="student-name">{{ student.name }}</div>
                     <div class="student-code">{{ student.code }}</div>
@@ -172,7 +172,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   classData: {
@@ -219,6 +220,29 @@ const gradeDistribution = ref([
   { label: '5-5.9', count: 3, percentage: 9 },
   { label: '<5', count: 2, percentage: 6 }
 ])
+
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return '/default-avatar.png'
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  // revoke any created blob urls
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+})
 
 const filteredStudents = computed(() => {
   if (!searchStudent.value) return students.value

@@ -136,7 +136,9 @@ const handleCancel = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 99999;
+  /* Place the confirm dialog above most modals. App modals use z-index: 100000,
+     so use slightly higher value to ensure the confirm dialog is visible on top. */
+  z-index: 100001;
   padding: 20px;
 }
 

@@ -17,7 +17,7 @@
         <div class="section-content">
           <div class="avatar-container">
             <div class="current-avatar">
-              <img :src="profileData.avatar || defaultAvatar" alt="Avatar" />
+              <img :src="avatarSrc(profileData.avatar) || defaultAvatar" alt="Avatar" @error="onAvatarError($event, profileData.avatar)" />
               <div class="avatar-overlay">
                 <i class="fas fa-camera"></i>
               </div>
@@ -154,7 +154,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 // Avatar input reference
 const avatarInput = ref(null)
@@ -250,6 +251,31 @@ watch(() => profileData.value.bio, (newBio) => {
 // Initialize
 onMounted(() => {
   loadProfile()
+})
+
+// avatar fallback helpers -- for protected avatar URLs (403 fallback)
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return null
+  // if it's a data URL (preview), keep it
+  if (typeof url === 'string' && url.startsWith('data:')) return url
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
 })
 </script>
 

@@ -28,7 +28,12 @@
         <div class="profile-header">
           <div class="profile-avatar">
             <div class="avatar-container">
-              <img v-if="account.avatar" :src="account.avatar" :alt="account.name" />
+              <img
+                v-if="account.avatar && (!_failed.has(account.avatar) || _blobMap.has(account.avatar))"
+                :src="avatarSrc(account.avatar)"
+                :alt="account.name"
+                @error="onAvatarError($event, account.avatar)"
+              />
               <div v-else class="avatar-placeholder">
                 {{ getInitials(account.name) }}
               </div>
@@ -226,8 +231,10 @@
 </template>
 
 <script setup>
-import { ref, toRef } from 'vue'
+import { ref, toRef, onBeforeUnmount } from 'vue'
 import { useModalBodyScroll } from '@/composables/useModalBodyScroll'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+
 
 const props = defineProps({
   show: {
@@ -247,6 +254,43 @@ useModalBodyScroll(toRef(props, 'show'))
 
 // Tab management
 const activeTab = ref('basic')
+
+// fallback helpers for avatars
+const _blobMap = ref(new Map())
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return ''
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    try { ev.target.style.display = 'none' } catch (e) {}
+    return
+  }
+  if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+  try {
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) {
+      _blobMap.value.set(url, b)
+      if (ev && ev.target) ev.target.src = b
+      return
+    }
+  } catch (e) {
+    _failed.value.add(url)
+  }
+  try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+}
+
+onBeforeUnmount(() => {
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
+})
 
 const tabs = [
   {
@@ -323,7 +367,8 @@ const formatDate = (date) => {
   bottom: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  z-index: 99999 !important;
+  /* raise above header so modals display correctly on top */
+  z-index: 100000 !important;
   
   background: rgba(15, 23, 42, 0.7) !important;
   backdrop-filter: blur(8px) !important;

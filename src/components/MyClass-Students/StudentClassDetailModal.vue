@@ -111,7 +111,7 @@
               <div class="teacher-contact-section">
                 <h3>Liên hệ giảng viên</h3>
                 <div class="teacher-contact-card">
-                  <img :src="classData.teacher.avatar" :alt="classData.teacher.name" class="teacher-avatar">
+                  <img :src="avatarSrc(classData.teacher?.avatar)" :alt="classData.teacher.name" class="teacher-avatar" @error="onAvatarError($event, classData.teacher?.avatar)">
                   <div class="teacher-info">
                     <div class="teacher-name">{{ classData.teacher.name }}</div>
                     <div class="teacher-title">{{ classData.teacher.title }}</div>
@@ -244,8 +244,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   classData: {
@@ -361,6 +363,29 @@ const goToAssignments = () => {
   })
   close()
 }
+
+// avatar blob fallback helpers
+const blobMap = ref({})
+
+const avatarSrc = (url) => {
+  if (!url) return '/default-avatar.png'
+  return blobMap.value[url] || url
+}
+
+const onAvatarError = async (event, url) => {
+  try {
+    if (!url || blobMap.value[url]) return
+    const b = await fetchImageAsBlobUrl(url)
+    blobMap.value[url] = b
+    event.target.src = b
+  } catch (err) {
+    console.debug('avatar fetch fallback failed', err)
+  }
+}
+
+onBeforeUnmount(() => {
+  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+})
 </script>
 
 <style scoped>

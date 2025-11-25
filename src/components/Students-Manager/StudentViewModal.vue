@@ -3,7 +3,13 @@
     <div class="modal-container">
       <div class="modal-header">
         <div class="student-header-info">
-          <img :src="student.avatar || '/default-avatar.png'" :alt="student.fullName" />
+          <img
+            v-if="student.avatar && (!(_failed.has(student.avatar)) || _blobMap.value.has(student.avatar))"
+            :src="avatarSrc(student.avatar)"
+            :alt="student.fullName"
+            @error="onAvatarError($event, student.avatar)"
+          />
+          <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
           <div>
             <h2>{{ student.fullName }}</h2>
             <p>{{ student.studentCode }}</p>
@@ -363,7 +369,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
 
 const props = defineProps({
   isOpen: Boolean,
@@ -385,6 +392,42 @@ const tabs = [
   { id: 'progress', label: 'Tiến độ', icon: 'fas fa-chart-line' },
   { id: 'history', label: 'Lịch sử', icon: 'fas fa-clock' }
 ]
+
+const _blobMap = ref(new Map())
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return ''
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    try { ev.target.style.display = 'none' } catch (e) {}
+    return
+  }
+  if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
+  try {
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) {
+      _blobMap.value.set(url, b)
+      if (ev && ev.target) ev.target.src = b
+      return
+    }
+  } catch (e) {
+    _failed.value.add(url)
+  }
+  try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
+}
+
+onBeforeUnmount(() => {
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
+})
 
 const registeredCourses = ref([
   {

@@ -16,6 +16,7 @@
     "ant-design-vue": "^4.2.6",
     "pinia": "^3.0.3",
     "router": "^2.2.0",
+    "socket.io-client": "^4.8.1",
     "tailwindcss": "^4.1.13",
     "vue": "^3.5.18",
     "vue-i18n": "^11.1.12",
