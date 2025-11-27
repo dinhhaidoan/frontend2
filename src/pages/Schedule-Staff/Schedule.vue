@@ -155,152 +155,44 @@
       @resolve="resolveConflict"
     />
 
-    <!-- Delete Schedule Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="deleteScheduleModalVisible" class="modal-overlay-delete" @click="closeDeleteScheduleModal">
-        <div class="delete-modal-popup" @click.stop>
-          <button @click="closeDeleteScheduleModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="delete-icon-wrapper">
-            <div class="delete-icon-animated">
-              <i :class="scheduleToDelete?.examType ? 'fas fa-file-alt' : 'fas fa-chalkboard-teacher'"></i>
-            </div>
-          </div>
-          
-          <h3 class="delete-title">Xác nhận xóa {{ scheduleToDelete?.examType ? 'lịch thi' : 'lịch học' }}</h3>
-          
-          <div class="delete-content">
-            <div class="subject-info-delete">
-              <div class="subject-code-delete">{{ scheduleToDelete?.subjectCode }}</div>
-              <div class="subject-name-delete">{{ scheduleToDelete?.subjectName }}</div>
-              <div class="schedule-meta-delete">
-                <span><i class="fas fa-user"></i> {{ scheduleToDelete?.teacherName }}</span>
-                <span><i class="fas fa-door-open"></i> {{ scheduleToDelete?.roomName }}</span>
-                <span v-if="scheduleToDelete?.examType">
-                  <i class="fas fa-calendar"></i> {{ scheduleToDelete?.date }} - {{ scheduleToDelete?.startTime }}
-                </span>
-                <span v-else>
-                  <i class="fas fa-calendar-week"></i> {{ scheduleToDelete?.dayOfWeekName }}, {{ scheduleToDelete?.startTime }} - {{ scheduleToDelete?.endTime }}
-                </span>
-              </div>
-            </div>
-            
-            <div class="warning-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Hành động này không thể hoàn tác. Lịch sẽ bị xóa vĩnh viễn khỏi hệ thống.</span>
-            </div>
-          </div>
-          
-          <div class="delete-actions">
-            <button @click="closeDeleteScheduleModal" class="btn-cancel-delete">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmDeleteSchedule" class="btn-confirm-delete">
-              <i class="fas fa-trash-alt"></i>
-              Xác nhận xóa
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Delete Schedule Confirmation (shared ConfirmDialog) -->
+    <ConfirmDialog
+      :show="deleteScheduleModalVisible"
+      type="danger"
+      title="Xác nhận xóa lịch"
+      :message="scheduleToDelete ? `Bạn có chắc muốn xóa ${scheduleToDelete.examType ? 'lịch thi' : 'lịch học'} ${scheduleToDelete.subjectName || scheduleToDelete.subjectCode}? Hành động này sẽ không thể hoàn tác.` : 'Bạn có chắc muốn xóa lịch này?'
+      "
+      confirmText="Xóa"
+      cancelText="Hủy"
+      @confirm="confirmDeleteSchedule"
+      @cancel="closeDeleteScheduleModal"
+    />
 
-    <!-- Update Class Schedule Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateScheduleModalVisible" class="modal-overlay-delete" @click="closeUpdateScheduleModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateScheduleModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-calendar-check"></i>
-            </div>
-          </div>
-          
-          <h3 class="update-title">Xác nhận cập nhật lịch học</h3>
-          
-          <div class="update-content">
-            <div class="subject-info-update">
-              <div class="subject-code-update">{{ scheduleToUpdate?.subjectCode }}</div>
-              <div class="subject-name-update">{{ scheduleToUpdate?.subjectName }}</div>
-              <div class="schedule-meta-update">
-                <span><i class="fas fa-user"></i> {{ scheduleToUpdate?.teacherName }}</span>
-                <span><i class="fas fa-door-open"></i> {{ scheduleToUpdate?.roomName }}</span>
-                <span><i class="fas fa-calendar-week"></i> {{ scheduleToUpdate?.dayOfWeekName }}, {{ scheduleToUpdate?.startTime }} - {{ scheduleToUpdate?.endTime }}</span>
-              </div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Bạn có chắc chắn muốn lưu các thay đổi cho lịch học này?</span>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateScheduleModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateSchedule" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Update Schedule Confirmation (shared ConfirmDialog) -->
+    <ConfirmDialog
+      :show="updateScheduleModalVisible"
+      type="warning"
+      title="Xác nhận cập nhật lịch"
+      :message="scheduleToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch ${scheduleToUpdate.subjectName || scheduleToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch này?'
+      "
+      confirmText="Xác nhận"
+      cancelText="Hủy"
+      @confirm="confirmUpdateSchedule"
+      @cancel="closeUpdateScheduleModal"
+    />
 
-    <!-- Update Exam Schedule Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateExamModalVisible" class="modal-overlay-delete" @click="closeUpdateExamModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateExamModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-file-signature"></i>
-            </div>
-          </div>
-          
-          <h3 class="update-title">Xác nhận cập nhật lịch thi</h3>
-          
-          <div class="update-content">
-            <div class="subject-info-update">
-              <div class="subject-code-update">{{ examToUpdate?.subjectCode }}</div>
-              <div class="subject-name-update">{{ examToUpdate?.subjectName }}</div>
-              <div class="schedule-meta-update">
-                <span><i class="fas fa-clipboard-check"></i> {{ examToUpdate?.examTypeName }}</span>
-                <span><i class="fas fa-user"></i> {{ examToUpdate?.teacherName }}</span>
-                <span><i class="fas fa-door-open"></i> {{ examToUpdate?.roomName }}</span>
-                <span><i class="fas fa-calendar"></i> {{ examToUpdate?.date }}, {{ examToUpdate?.startTime }} - {{ examToUpdate?.endTime }}</span>
-              </div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Bạn có chắc chắn muốn lưu các thay đổi cho lịch thi này?</span>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateExamModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateExam" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Update Exam confirmation (shared ConfirmDialog) -->
+    <ConfirmDialog
+      :show="updateExamModalVisible"
+      type="warning"
+      title="Xác nhận cập nhật lịch thi"
+      :message="examToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch thi ${examToUpdate.subjectName || examToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch thi này?'
+      "
+      confirmText="Xác nhận"
+      cancelText="Hủy"
+      @confirm="confirmUpdateExam"
+      @cancel="closeUpdateExamModal"
+    />
   </div>
 </template>
 
@@ -316,6 +208,7 @@ import ScheduleModal from '@/components/Schedule-Staff/ScheduleModal.vue'
 import ExamModal from '@/components/Schedule-Staff/ExamModal.vue'
 import ScheduleDetailsModal from '@/components/Schedule-Staff/ScheduleDetailsModal.vue'
 import ConflictCheckerModal from '@/components/Schedule-Staff/ConflictCheckerModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 export default {
   name: 'Schedule',
@@ -1133,7 +1026,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100001;
   padding: 20px;
 }
 

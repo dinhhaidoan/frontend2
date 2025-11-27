@@ -173,6 +173,88 @@ export function formatDateShort(dateInput) {
 }
 
 /**
+ * Convert an ISO date string or Date object to dd/mm/yyyy format
+ * Example: '2025-09-01' -> '01/09/2025'
+ * @param {string|Date} dateInput
+ * @returns {string}
+ */
+export function formatDateDDMMYYYY(dateInput) {
+  if (!dateInput) return ''
+  try {
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+    if (isNaN(date.getTime())) return ''
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  } catch (err) {
+    console.error('formatDateDDMMYYYY error:', err)
+    return ''
+  }
+}
+
+/**
+ * Convert a dd/mm/yyyy string to ISO (yyyy-mm-dd) for API consumption
+ * Example: '01/09/2025' -> '2025-09-01'
+ * @param {string} ddmmyyyy
+ * @returns {string|null}
+ */
+export function parseDDMMYYYYToISO(ddmmyyyy) {
+  if (!ddmmyyyy || typeof ddmmyyyy !== 'string') return null
+  const parts = ddmmyyyy.split('/').map(p => p.trim())
+  if (parts.length !== 3) return null
+  const [dd, mm, yyyy] = parts
+  const date = new Date(`${yyyy}-${mm}-${dd}`)
+  if (isNaN(date.getTime())) return null
+  const y = date.getFullYear()
+  const m = (date.getMonth() + 1).toString().padStart(2, '0')
+  const d = date.getDate().toString().padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/**
+ * Parse a DATEONLY string 'YYYY-MM-DD' to a Date at local midnight.
+ * Prevent timezone skew by explicitly setting local time to midnight.
+ */
+export function parseISODateToLocal(dateIso) {
+  if (!dateIso) return null
+  try {
+    // dateIso is expected like '2025-09-01', so create a Date at local midnight
+    const [y, m, d] = String(dateIso).split('-').map(s => parseInt(s, 10))
+    if (!y || !m || !d) return null
+    return new Date(y, m - 1, d, 0, 0, 0, 0)
+  } catch (err) {
+    console.error('parseISODateToLocal error:', err)
+    return null
+  }
+}
+
+/**
+ * Compute semester status by dates (client-side).
+ * - 'upcoming' if now < start
+ * - 'active' if start <= now <= end
+ * - 'completed' if now > end
+ * Returns one of: 'upcoming'|'active'|'completed'
+ */
+export function getSemesterStatus(startIso, endIso) {
+  try {
+    const start = parseISODateToLocal(startIso)
+    const end = parseISODateToLocal(endIso)
+    const now = new Date()
+    if (!start || !end) {
+      // if missing critical date data, default to upcoming
+      return 'upcoming'
+    }
+    if (now < start) return 'upcoming'
+    if (now > end) return 'completed'
+    return 'active'
+  } catch (err) {
+    console.error('getSemesterStatus error:', err)
+    return 'upcoming'
+  }
+}
+
+/**
  * Format priority sang tiếng Việt
  * @param {string} priority - 'low', 'medium', 'high'
  * @returns {string}

@@ -233,10 +233,23 @@
       </div>
     </div>
   </div>
+  
+  <!-- Save Confirmation -->
+  <ConfirmDialog
+    :show="saveConfirmVisible"
+    type="warning"
+    title="Xác nhận lưu cấu hình"
+    :message="'Bạn có chắc chắn muốn lưu những thay đổi này cho cấu hình đăng ký? Hành động có thể ảnh hưởng đến sinh viên đang đăng ký.'"
+    confirmText="Lưu lại"
+    cancelText="Hủy"
+    @confirm="confirmSave"
+    @cancel="closeSaveConfirm"
+  />
 </template>
 
 <script>
 import { ref, computed, watch, onMounted } from 'vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 export default {
   name: 'RegistrationModal',
@@ -336,11 +349,14 @@ export default {
       }
     }
     
+    const saveConfirmVisible = ref(false)
+    const pendingSaveConfig = ref(null)
+
     const handleSave = () => {
       if (!isFormValid.value) return
-      
+
       const config = { ...formData.value }
-      
+
       // Convert datetime-local back to ISO format
       if (config.startDate) {
         config.startDate = new Date(config.startDate).toISOString()
@@ -348,8 +364,21 @@ export default {
       if (config.endDate) {
         config.endDate = new Date(config.endDate).toISOString()
       }
-      
-      emit('save', config)
+
+      // Store pending config and show confirmation dialog
+      pendingSaveConfig.value = config
+      saveConfirmVisible.value = true
+    }
+
+    const confirmSave = () => {
+      if (!pendingSaveConfig.value) return closeSaveConfirm()
+      emit('save', pendingSaveConfig.value)
+      closeSaveConfirm()
+    }
+
+    const closeSaveConfirm = () => {
+      saveConfirmVisible.value = false
+      pendingSaveConfig.value = null
     }
     
     const handleOverlayClick = () => {
@@ -372,6 +401,9 @@ export default {
       formatDateRange,
       calculateDuration,
       handleSave,
+      saveConfirmVisible,
+      confirmSave,
+      closeSaveConfirm,
       handleOverlayClick
     }
   }
@@ -389,7 +421,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100001;
   padding: 20px;
 }
 

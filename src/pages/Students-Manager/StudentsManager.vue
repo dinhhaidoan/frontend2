@@ -66,98 +66,31 @@
       @import="handleImportData"
     />
 
-    <!-- Delete Student Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="deleteStudentModalVisible" class="modal-overlay-delete" @click="closeDeleteStudentModal">
-        <div class="delete-modal-popup" @click.stop>
-          <button @click="closeDeleteStudentModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="delete-icon-wrapper">
-            <div class="delete-icon-animated">
-              <i class="fas fa-user-graduate"></i>
-            </div>
-          </div>
-          
-          <h3 class="delete-title">Xác nhận xóa sinh viên</h3>
-          
-          <div class="delete-content">
-            <div class="subject-info-delete">
-              <div class="subject-code-delete">{{ studentToDelete?.studentCode }}</div>
-              <div class="subject-name-delete">{{ studentToDelete?.fullName }}</div>
-              <div class="schedule-meta-delete">
-                <span><i class="fas fa-graduation-cap"></i> {{ studentToDelete?.major }} - Lớp {{ studentToDelete?.officialClass }}</span>
-                <span><i class="fas fa-envelope"></i> {{ studentToDelete?.email }}</span>
-                <span><i class="fas fa-phone"></i> {{ studentToDelete?.phoneNumber }}</span>
-              </div>
-            </div>
-            
-            <div class="warning-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Hành động này không thể hoàn tác. Tất cả dữ liệu sinh viên sẽ bị xóa vĩnh viễn.</span>
-            </div>
-          </div>
-          
-          <div class="delete-actions">
-            <button @click="closeDeleteStudentModal" class="btn-cancel-delete">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmDeleteStudent" class="btn-confirm-delete">
-              <i class="fas fa-trash-alt"></i>
-              Xác nhận xóa
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Delete Student Confirmation -->
+    <ConfirmDialog
+      :show="deleteStudentModalVisible"
+      type="danger"
+      title="Xác nhận xóa sinh viên"
+      :message="studentToDelete ? `Bạn có chắc muốn xóa sinh viên ${studentToDelete.fullName || studentToDelete.studentCode}? Hành động này không thể hoàn tác.` : 'Bạn có chắc muốn xóa sinh viên này?'
+      "
+      confirmText="Xóa"
+      cancelText="Hủy"
+      @confirm="confirmDeleteStudent"
+      @cancel="closeDeleteStudentModal"
+    />
 
-    <!-- Update Student Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateStudentModalVisible" class="modal-overlay-delete" @click="closeUpdateStudentModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateStudentModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-user-check"></i>
-            </div>
-          </div>
-          
-          <h3 class="update-title">Xác nhận cập nhật thông tin sinh viên</h3>
-          
-          <div class="update-content">
-            <div class="subject-info-update">
-              <div class="subject-code-update">{{ studentToUpdate?.studentCode }}</div>
-              <div class="subject-name-update">{{ studentToUpdate?.fullName }}</div>
-              <div class="schedule-meta-update">
-                <span><i class="fas fa-graduation-cap"></i> {{ studentToUpdate?.major }} - Lớp {{ studentToUpdate?.officialClass }}</span>
-                <span><i class="fas fa-envelope"></i> {{ studentToUpdate?.email }}</span>
-              </div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Bạn có chắc chắn muốn lưu các thay đổi thông tin sinh viên này?</span>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateStudentModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateStudent" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Update Student Confirmation -->
+    <ConfirmDialog
+      :show="updateStudentModalVisible"
+      type="warning"
+      title="Xác nhận cập nhật thông tin sinh viên"
+      :message="studentToUpdate ? `Bạn có chắc chắn muốn cập nhật thông tin sinh viên ${studentToUpdate.fullName || studentToUpdate.studentCode}?` : 'Bạn có chắc chắn muốn cập nhật thông tin sinh viên này?'
+      "
+      confirmText="Xác nhận"
+      cancelText="Hủy"
+      @confirm="confirmUpdateStudent"
+      @cancel="closeUpdateStudentModal"
+    />
   </div>
 </template>
 
@@ -170,6 +103,7 @@ import StudentModal from '@/components/Students-Manager/StudentModal.vue'
 import StudentViewModal from '@/components/Students-Manager/StudentViewModal.vue'
 import BulkActions from '@/components/Students-Manager/BulkActions.vue'
 import ImportModal from '@/components/Students-Manager/ImportModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 // State
 const students = ref([])
@@ -694,7 +628,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100001;
   padding: 20px;
 }
 

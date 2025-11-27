@@ -25,13 +25,11 @@
             </th>
             <th>Mã GV</th>
             <th>Họ tên</th>
-            <th>Khoa/Bộ môn</th>
             <th>Học hàm học vị</th>
             <th>Email</th>
             <th>SĐT</th>
             <th>Trạng thái</th>
-            <th>Môn dạy</th>
-            <th>Lớp phụ trách</th>
+            <!-- simplified: don't show subject/class counts in table (details in modal) -->
             <th>Thao tác</th>
           </tr>
         </thead>
@@ -70,11 +68,8 @@
               </div>
             </td>
             <td>
-              <span class="department">{{ getDepartmentName(teacher.department) }}</span>
-            </td>
-            <td>
-              <span class="academic-rank" :class="teacher.academicRank">
-                {{ getAcademicRankName(teacher.academicRank) }}
+              <span class="academic-rank" :class="getAcademicRankClass(teacher.academicRank)">
+                {{ getAcademicRankLabel(teacher.academicRank) }}
               </span>
             </td>
             <td>
@@ -91,22 +86,11 @@
                 {{ getStatusName(teacher.status) }}
               </span>
             </td>
-            <td>
-              <div class="subject-count">
-                <span class="count">{{ teacher.subjectCount || 0 }}</span>
-                <small>môn</small>
-              </div>
-            </td>
-            <td>
-              <div class="class-count">
-                <span class="count">{{ teacher.classCount || 0 }}</span>
-                <small>lớp</small>
-              </div>
-            </td>
+            <!-- basic info only: subject/class omitted to keep rows compact -->
             <td>
               <div class="action-buttons">
                 <button 
-                  @click="$emit('view', teacher)" 
+                  @click="onView(teacher)" 
                   class="btn-action view"
                   title="Xem chi tiết"
                 >
@@ -119,6 +103,7 @@
                 >
                   <i class="fas fa-edit"></i>
                 </button>
+                <!-- Keep actions but condense UI — still allow suspend/activate if present -->
                 <button 
                   v-if="teacher.status === 'active'"
                   @click="$emit('suspend', teacher)" 
@@ -253,6 +238,12 @@ export default {
     }
   },
   methods: {
+    onView(teacher) {
+      // Debug helper to ensure click reaches parent
+      // eslint-disable-next-line no-console
+      console.log('[TeacherTable] view click', teacher)
+      this.$emit('view', teacher)
+    },
     toggleSelectAll() {
       if (this.isAllSelected) {
         const newSelection = this.selectedTeachers.filter(id => 
@@ -301,6 +292,36 @@ export default {
         'cn': 'Cử nhân'
       }
       return ranks[rank] || rank
+    },
+
+    // Return a stable class name for the badge. If `rank` is a code (ts, pgs, etc.) use it.
+    // If `rank` is a display label (e.g., 'Thạc sĩ'), try to map it back to the code.
+    getAcademicRankClass(rank) {
+      if (!rank) return ''
+      const codes = {
+        gs: 'Giáo sư',
+        pgs: 'Phó giáo sư',
+        ts: 'Tiến sĩ',
+        ths: 'Thạc sĩ',
+        ksh: 'Kỹ sư',
+        cn: 'Cử nhân'
+      }
+      // If rank already looks like a code
+      if (codes[rank]) return rank
+
+      // If it's a label, find matching code
+      const found = Object.keys(codes).find(k => codes[k] === rank)
+      if (found) return found
+
+      // Fallback: normalize text to a safe class
+      return String(rank).toLowerCase().replace(/[^a-z0-9\-]/g, '-')
+    },
+
+    // Compute the display label for academic rank: if we receive a code -> map to label, otherwise show value
+    getAcademicRankLabel(rank) {
+      // reuse existing mapping
+      const label = this.getAcademicRankName(rank)
+      return label || '-' 
     },
     
     getStatusName(status) {
@@ -562,26 +583,7 @@ export default {
   color: #991b1b;
 }
 
-.subject-count,
-.class-count {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.subject-count .count,
-.class-count .count {
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.subject-count small,
-.class-count small {
-  color: #6b7280;
-  font-size: 11px;
-}
+    /* removed subject/class details from table - keep layout compact */
 
 .action-buttons {
   display: flex;

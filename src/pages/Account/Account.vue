@@ -237,7 +237,70 @@ import BulkActions from '@/components/Account/BulkActions.vue'
 import AccountModal from '@/components/Account/AccountModal.vue'
 import AccountViewModal from '@/components/Account/AccountViewModal.vue'
 import { useUsers } from '@/hooks/useUsers'
-import { uploadWithProgress, uploadImageToCloudinary } from '@/composables/useUploadWithProgress'
+// NOTE: upload helpers are implemented inline here (no composables) per request
+// Helper: upload with progress using XHR. Returns parsed JSON when available.
+const uploadWithProgress = (url, file, onProgress, opts = {}) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url, true)
+      // keep same-origin cookies for auth when backend uses cookie-based auth
+      xhr.withCredentials = true
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const ct = xhr.getResponseHeader('content-type') || ''
+          try {
+            if (ct.includes('application/json')) return resolve(JSON.parse(xhr.responseText))
+            if (xhr.responseText) return resolve(JSON.parse(xhr.responseText))
+            return resolve({})
+          } catch (e) { return resolve({}) }
+        }
+        // Include response body for easier debugging
+        return reject(new Error(`${xhr.status} ${xhr.statusText}: ${xhr.responseText || ''}`))
+      }
+
+      xhr.onerror = () => reject(new Error('Network error during upload'))
+      if (xhr.upload && typeof xhr.upload.onprogress !== 'undefined') {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      }
+
+      const fieldName = opts.fieldName || 'file'
+      const fd = new FormData()
+      fd.append(fieldName, file)
+      if (opts.extra && typeof opts.extra === 'object') {
+        for (const k of Object.keys(opts.extra)) fd.append(k, opts.extra[k])
+      }
+
+      xhr.send(fd)
+    } catch (e) { reject(e) }
+  })
+}
+
+// Helper: upload directly to Cloudinary using upload preset
+const uploadImageToCloudinary = async (file, onProgress = null) => {
+  if (!file) return null
+  const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || ''
+  const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
+
+  const missing = []
+  if (!CLOUD) missing.push('VITE_CLOUDINARY_CLOUD_NAME')
+  if (!PRESET) missing.push('VITE_CLOUDINARY_UPLOAD_PRESET')
+  if (missing.length) {
+    // throw a descriptive error so the caller can show helpful message
+    throw new Error(`Cloudinary không được cấu hình (missing: ${missing.join(', ')}). Thêm vào .env và restart dev server.`)
+  }
+
+  if (CLOUD.includes('YOUR_') || PRESET.includes('YOUR_')) {
+    throw new Error('Cloudinary cấu hình chưa hợp lệ. Vui lòng kiểm tra VITE_CLOUDINARY_CLOUD_NAME và VITE_CLOUDINARY_UPLOAD_PRESET')
+  }
+
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`
+  const res = await uploadWithProgress(url, file, onProgress, { fieldName: 'file', extra: { upload_preset: PRESET } })
+  return res
+}
 import { useToast } from '@/composables/useToast'
 
 // Reactive data: only role + status
@@ -491,124 +554,129 @@ const saveAccount = (accountData) => {
 }
 
 const confirmUpdateAccount = async () => {
-  if (accountToUpdate.value) {
-    const index = accounts.value.findIndex(a => a.id === accountToUpdate.value.id)
-    
-  if (index > -1) {
-      // Prepare payload for backend - match the format that works in Postman
-      const payload = {
-        // Update User table fields  
-        user_email: accountToUpdate.value.email,
-        user_phone: accountToUpdate.value.phone,
-        // Update profile table in nested format
-        profile: {}
-      }
+  if (!accountToUpdate.value || !accountToUpdate.value.userId) {
+    warning('Thông tin tài khoản không hợp lệ', 'Lỗi')
+    return
+  }
 
-      // Also include a nested `user` object in case backend expects it
-      payload.user = {
-        user_email: accountToUpdate.value.email,
-        user_phone: accountToUpdate.value.phone
-      }
+  const index = accounts.value.findIndex(a => a.id === accountToUpdate.value.id)
+  
+  if (index === -1) {
+    warning('Không tìm thấy tài khoản để cập nhật', 'Lỗi')
+    closeModals()
+    closeUpdateModal()
+    return
+  }
 
-      // Add role-specific profile data
-      if (accountToUpdate.value.role === 'student') {
-        payload.profile.student_name = accountToUpdate.value.name
-      } else if (accountToUpdate.value.role === 'teacher') {
-        payload.profile.teacher_name = accountToUpdate.value.name
-      } else if (accountToUpdate.value.role === 'staff') {
-        payload.profile.staff_name = accountToUpdate.value.name
-      } else if (accountToUpdate.value.role === 'admin') {
-        payload.profile.admin_name = accountToUpdate.value.name
-      }
+  // 1. Chuẩn bị payload cập nhật thông tin cơ bản
+  const payload = {
+    user_email: accountToUpdate.value.email,
+    user_phone: accountToUpdate.value.phone,
+    profile: {},
+    // Backup: gửi kèm object user lồng nhau đề phòng backend yêu cầu format này
+    user: {
+      user_email: accountToUpdate.value.email,
+      user_phone: accountToUpdate.value.phone
+    }
+  }
 
-      
+  // Mapping tên theo vai trò vào bảng Profile tương ứng
+  const role = accountToUpdate.value.role
+  const name = accountToUpdate.value.name
+  if (role === 'student') payload.profile.student_name = name
+  else if (role === 'teacher') payload.profile.teacher_name = name
+  else if (role === 'staff') payload.profile.staff_name = name
+  else if (role === 'admin') payload.profile.admin_name = name
 
-      // Call backend to update user - use user_code as identifier
+  try {
+    // 2. Xử lý Upload Avatar (nếu có chọn file mới)
+    if (accountToUpdate.value.avatarFile) {
       try {
-        // If a new avatar file was selected in the modal, attempt to upload it first.
-        if (accountToUpdate.value && accountToUpdate.value.avatarFile) {
-          try {
-            uploadInProgress.value = true
-            uploadProgress.value = 0
-            const userCode = accountToUpdate.value.userId
-            const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
-            let API_BASE = String(_rawBase || '/api')
-            if (!API_BASE.includes('/api')) API_BASE = API_BASE.replace(/\/+$/, '') + '/api'
-            const uploadUrl = `${API_BASE.replace(/\/+$/,'')}/share/auth/users/${encodeURIComponent(userCode)}/avatar`
+        uploadInProgress.value = true
+        uploadProgress.value = 0
+        
+        const userCode = accountToUpdate.value.userId
+        
+        // Xây dựng URL upload nội bộ
+        const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
+        let API_BASE = String(_rawBase || '/api')
+        if (!API_BASE.includes('/api')) API_BASE = API_BASE.replace(/\/+$/, '') + '/api'
+        const uploadUrl = `${API_BASE.replace(/\/+$/,'')}/share/auth/users/${encodeURIComponent(userCode)}/avatar`
+
+        try {
+          // Thử upload lên Server nội bộ trước
+          const rj = await uploadWithProgress(uploadUrl, accountToUpdate.value.avatarFile, p => (uploadProgress.value = p), { fieldName: 'avatar' })
+          
+          if (rj && (rj.user || rj.user_avatar)) {
+            const returnedUser = rj.user || rj
+            accountToUpdate.value.user_avatar = returnedUser.user_avatar || accountToUpdate.value.user_avatar
+            accountToUpdate.value.user_avatar_public_id = returnedUser.user_avatar_public_id || accountToUpdate.value.user_avatar_public_id
+          }
+        } catch (serverErr) {
+          const txt = (serverErr && serverErr.message) ? serverErr.message : ''
+          
+          // QUAN TRỌNG: Nếu lỗi là 404 (API ko tồn tại) hoặc 403 (Không có quyền/Bị chặn) 
+          // -> Chuyển sang upload Cloudinary
+          if (txt && (txt.startsWith('404') || txt.startsWith('403'))) {
+            console.warn('Upload server nội bộ thất bại (403/404), chuyển sang Cloudinary...')
+            
             try {
-              const rj = await uploadWithProgress(uploadUrl, accountToUpdate.value.avatarFile, p => (uploadProgress.value = p), { fieldName: 'avatar' })
-              if (rj && rj.user) {
-                // attach returned avatar fields to the accountToUpdate so we can send them with update
-                accountToUpdate.value.user_avatar = rj.user.user_avatar || rj.user_avatar || accountToUpdate.value.user_avatar
-                accountToUpdate.value.user_avatar_public_id = rj.user.user_avatar_public_id || rj.user_avatar_public_id || accountToUpdate.value.user_avatar_public_id
+              const cloud = await uploadImageToCloudinary(accountToUpdate.value.avatarFile, p => (uploadProgress.value = p))
+              if (cloud) {
+                accountToUpdate.value.user_avatar = cloud.secure_url
+                accountToUpdate.value.user_avatar_public_id = cloud.public_id
               }
-            } catch (err) {
-              const txt = (err && err.message) ? err.message : ''
-              if (txt && txt.startsWith('404')) {
-                // backend doesn't support avatar upload; fallback to Cloudinary
-                try {
-                  const cloud = await uploadImageToCloudinary(accountToUpdate.value.avatarFile, p => (uploadProgress.value = p))
-                  if (cloud) {
-                    accountToUpdate.value.user_avatar = cloud.secure_url
-                    accountToUpdate.value.user_avatar_public_id = cloud.public_id
-                  }
-                } catch (ce) {
-                  console.error('Cloudinary fallback failed', ce)
-                  throw ce
-                }
-              } else {
-                throw err
-              }
-            } finally {
-              uploadInProgress.value = false
-              uploadProgress.value = 0
+            } catch (cloudErr) {
+              console.error('Cloudinary fallback failed', cloudErr)
+              throw cloudErr // Ném lỗi này ra để catch bên ngoài bắt
             }
-          } catch (e) {
-            error(e.message || 'Không thể upload avatar')
-            return
+          } else {
+            // Các lỗi khác (500, Network Error...) thì không fallback
+            throw serverErr
           }
         }
+      } catch (e) {
+        error(e.message || 'Không thể upload avatar', 'Lỗi Upload')
+        // Dừng luôn nếu upload thất bại
+        uploadInProgress.value = false
+        return 
+      } finally {
+        uploadInProgress.value = false
+        uploadProgress.value = 0
+      }
+    }
 
-        // If the upload produced an avatar url, attach it to payload.user
-        if (accountToUpdate.value && (accountToUpdate.value.user_avatar || accountToUpdate.value.user_avatar_public_id)) {
-          payload.user = payload.user || {}
-          if (accountToUpdate.value.user_avatar) payload.user.user_avatar = accountToUpdate.value.user_avatar
-          if (accountToUpdate.value.user_avatar_public_id) payload.user.user_avatar_public_id = accountToUpdate.value.user_avatar_public_id
-        }
+    // 3. Cập nhật thông tin User vào Database (bao gồm cả link avatar mới nếu có)
+    if (accountToUpdate.value.user_avatar || accountToUpdate.value.user_avatar_public_id) {
+      payload.user = payload.user || {}
+      if (accountToUpdate.value.user_avatar) payload.user.user_avatar = accountToUpdate.value.user_avatar
+      if (accountToUpdate.value.user_avatar_public_id) payload.user.user_avatar_public_id = accountToUpdate.value.user_avatar_public_id
+    }
 
-        const result = await updateUser(accountToUpdate.value.userId, payload)
-        
-        // Force refresh from backend to see if data was actually saved
-        await loadAccounts(false)
-        
-        // Check if the update actually worked by comparing fresh data
-        const updatedAccount = accounts.value.find(a => a.userId === accountToUpdate.value.userId)
-        
-        if (updatedAccount && updatedAccount.email === payload.user_email) {
-          success(
-            `Tài khoản ${accountToUpdate.value.name} đã được cập nhật thành công`,
-            'Cập nhật thành công'
-          )
-        } else {
-          warning(
-            'Backend đã nhận request nhưng có thể chưa lưu vào database. Vui lòng kiểm tra lại.',
-            'Cảnh báo'
-          )
-        }
-      } catch (err) {
-        error(
-          err.message || 'Đã có lỗi xảy ra khi cập nhật thông tin tài khoản',
-          'Cập nhật thất bại'
-        )
+    const result = await updateUser(accountToUpdate.value.userId, payload)
+    
+    // 4. Làm mới dữ liệu bảng
+    await loadAccounts(false)
+    
+    // Kiểm tra kết quả
+    if (accountToUpdate.value && accountToUpdate.value.userId) {
+      const updatedAccount = accounts.value.find(a => a.userId === accountToUpdate.value.userId)
+      if (updatedAccount) {
+        success(`Tài khoản ${updatedAccount.name} đã được cập nhật thành công`, 'Thành công')
+      } else {
+        warning('Backend đã nhận yêu cầu nhưng dữ liệu hiển thị chưa cập nhật ngay. Vui lòng tải lại trang.', 'Cảnh báo')
       }
     } else {
-      warning('Không tìm thấy tài khoản để cập nhật', 'Lỗi')
+      success('Tài khoản đã được cập nhật thành công', 'Thành công')
     }
-  } else {
-    warning('Thông tin tài khoản không hợp lệ', 'Lỗi')
+
+  } catch (err) {
+    console.error(err)
+    error(err.message || 'Đã có lỗi xảy ra khi cập nhật thông tin tài khoản', 'Cập nhật thất bại')
+  } finally {
+    closeModals()
+    closeUpdateModal()
   }
-  closeModals()
-  closeUpdateModal()
 }
 
 const closeUpdateModal = () => {
@@ -1442,7 +1510,8 @@ const processImport = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  /* Ensure modal overlay covers any global header/nav with high z-index */
+  z-index: 100001;
   animation: fadeIn 0.3s ease;
 }
 
@@ -1455,6 +1524,9 @@ const processImport = async () => {
   max-height: 90vh;
   overflow-y: auto;
   animation: modalSlideIn 0.3s ease;
+  /* put modal content above overlay and other elements */
+  position: relative;
+  z-index: 100002;
 }
 
 @keyframes fadeIn {

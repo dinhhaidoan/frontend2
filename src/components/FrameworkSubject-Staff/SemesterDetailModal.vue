@@ -139,10 +139,12 @@ const getStatusLabel = (status) => {
   return labels[status] || status
 }
 
+import { formatDateDDMMYYYY } from '@/utils/formatters'
+
 const formatDateRange = (startDate, endDate) => {
   if (!startDate || !endDate) return 'Chưa xác định'
-  const start = new Date(startDate).toLocaleDateString('vi-VN')
-  const end = new Date(endDate).toLocaleDateString('vi-VN')
+  const start = formatDateDDMMYYYY(startDate)
+  const end = formatDateDDMMYYYY(endDate)
   return `${start} - ${end}`
 }
 
@@ -221,6 +223,19 @@ const getSubjectTypeLabel = (type) => {
   font-weight: 600;
   width: fit-content;
   background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.header-info .semester-status.completed {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+.header-info .semester-status.upcoming {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+.header-info .semester-status.active {
+  background: rgba(255, 255, 255, 0.12);
   color: white;
 }
 

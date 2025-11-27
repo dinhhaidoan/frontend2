@@ -94,7 +94,7 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <label>Khoa/Bộ môn</label>
-                      <span>{{ getDepartmentName(teacher?.department) }}</span>
+                      <span>CÔNG NGHỆ THÔNG TIN</span>
                     </div>
                     <div class="info-item">
                       <label>Học hàm học vị</label>
@@ -104,7 +104,7 @@
                     </div>
                     <div class="info-item">
                       <label>Chức vụ</label>
-                      <span>{{ teacher?.position || '-' }}</span>
+                      <span>{{ getPositionName(teacher) }}</span>
                     </div>
                     <div class="info-item">
                       <label>Ngày tham gia</label>
@@ -431,6 +431,24 @@ export default {
       }
       return genders[gender] || gender
     }
+
+    // Resolve a human-friendly position name for the teacher.
+    // We prefer an already-resolved `teacher.position` string, but if it's an id
+    // then try to read the nested Position object from raw payload or profile.
+    const getPositionName = (t) => {
+      if (!t) return '-'
+      const pos = t.position
+      // if position is a string and not a numeric id, return it
+      if (pos && typeof pos === 'string' && isNaN(Number(pos))) return pos
+
+      // try nested raw payloads
+      const nested = t.raw?.Teacher?.Position?.position_name || t.raw?.Position?.position_name || t.teacher?.Position?.position_name || t.teacher?.position_name
+      if (nested) return nested
+
+      // If t.position is numeric, maybe there's a mapping available elsewhere; fallback to showing id
+      if (pos) return String(pos)
+      return '-'
+    }
     
     const formatDate = (date) => {
       if (!date) return null
@@ -535,6 +553,10 @@ export default {
       getStatusIcon,
       getDepartmentName,
       getAcademicRankName,
+      // expose helpers and refs used by template
+      _blobMap,
+      _failed,
+      getPositionName,
       getGenderName,
       formatDate,
       getScheduleByDay,
@@ -558,7 +580,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* header and other elements use very high z-index (e.g. 99999). Ensure modal sits on top */
+  z-index: 100002 !important;
   padding: 20px;
 }
 

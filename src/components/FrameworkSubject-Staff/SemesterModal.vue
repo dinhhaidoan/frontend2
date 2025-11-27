@@ -19,6 +19,8 @@
               placeholder="VD: Học kỳ 1 - Năm 1"
               required
             />
+            <p v-if="serverErrors.semester_name || serverErrors.name" class="text-error">{{ serverErrors.semester_name || serverErrors.name }}</p>
+            <p v-else-if="clientErrors.name" class="text-error">{{ clientErrors.name }}</p>
           </div>
           
           <div class="form-row">
@@ -30,6 +32,8 @@
                 v-model="form.startDate"
                 required
               />
+              <p v-if="serverErrors.semester_start || serverErrors.start" class="text-error">{{ serverErrors.semester_start || serverErrors.start }}</p>
+              <p v-else-if="clientErrors.startDate" class="text-error">{{ clientErrors.startDate }}</p>
             </div>
             
             <div class="form-group">
@@ -40,6 +44,8 @@
                 v-model="form.endDate"
                 required
               />
+              <p v-if="serverErrors.semester_end || serverErrors.end" class="text-error">{{ serverErrors.semester_end || serverErrors.end }}</p>
+              <p v-else-if="clientErrors.endDate" class="text-error">{{ clientErrors.endDate }}</p>
             </div>
           </div>
           
@@ -53,6 +59,8 @@
               max="30"
               required
             />
+            <p v-if="serverErrors.max_credits || serverErrors.maxCredits" class="text-error">{{ serverErrors.max_credits || serverErrors.maxCredits }}</p>
+            <p v-else-if="clientErrors.maxCredits" class="text-error">{{ clientErrors.maxCredits }}</p>
           </div>
         </form>
       </div>
@@ -61,7 +69,7 @@
         <button @click="closeModal" class="btn-cancel">
           Hủy
         </button>
-        <button @click="handleSubmit" class="btn-primary">
+        <button @click="handleSubmit" class="btn-primary" :disabled="saving">
           <i :class="mode === 'create' ? 'fas fa-plus' : 'fas fa-save'"></i>
           {{ mode === 'create' ? 'Tạo học kỳ' : 'Cập nhật' }}
         </button>
@@ -86,6 +94,14 @@ const props = defineProps({
   semester: {
     type: Object,
     default: null
+  },
+  serverErrors: {
+    type: Object,
+    default: () => ({})
+  },
+  saving: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -128,18 +144,27 @@ const closeModal = () => {
   emit('close')
 }
 
+const clientErrors = reactive({ name: '', startDate: '', endDate: '', maxCredits: '' })
+
 const handleSubmit = () => {
+  // Reset errors
+  clientErrors.name = ''
+  clientErrors.startDate = ''
+  clientErrors.endDate = ''
+  clientErrors.maxCredits = ''
+
   // Validate form
-  if (!form.name || !form.startDate || !form.endDate) {
-    alert('Vui lòng điền đầy đủ thông tin bắt buộc')
-    return
+  if (!form.name || !form.name.trim()) clientErrors.name = 'Tên học kỳ bắt buộc'
+  if (!form.startDate) clientErrors.startDate = 'Ngày bắt đầu bắt buộc'
+  if (!form.endDate) clientErrors.endDate = 'Ngày kết thúc bắt buộc'
+  if (form.maxCredits != null && Number(form.maxCredits) < 0) clientErrors.maxCredits = 'Số tín chỉ không hợp lệ'
+
+  // Date logic
+  if (!clientErrors.startDate && !clientErrors.endDate) {
+    if (new Date(form.endDate) <= new Date(form.startDate)) clientErrors.endDate = 'Ngày kết thúc phải sau ngày bắt đầu'
   }
 
-  // Check date logic
-  if (new Date(form.endDate) <= new Date(form.startDate)) {
-    alert('Ngày kết thúc phải sau ngày bắt đầu')
-    return
-  }
+  if (clientErrors.name || clientErrors.startDate || clientErrors.endDate || clientErrors.maxCredits) return
 
   // Emit save event with form data
   emit('save', { ...form })

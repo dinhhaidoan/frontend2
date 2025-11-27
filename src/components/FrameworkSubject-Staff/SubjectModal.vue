@@ -212,38 +212,6 @@
                 class="form-textarea"
               ></textarea>
             </div>
-
-            <div class="form-group full-width">
-              <label>Nội dung chi tiết</label>
-              <textarea
-                v-model="formData.content"
-                rows="5"
-                placeholder="Nội dung chi tiết, mục tiêu học tập..."
-                :disabled="mode === 'view'"
-                class="form-textarea"
-              ></textarea>
-            </div>
-          </div>
-
-          <!-- Trạng thái -->
-          <div class="form-section">
-            <h3 class="section-title">
-              <i class="fas fa-toggle-on"></i>
-              Trạng thái
-            </h3>
-            
-            <div class="form-group">
-              <label>Trạng thái môn học</label>
-              <select
-                v-model="formData.status"
-                :disabled="mode === 'view'"
-                class="form-select"
-              >
-                <option value="active">Đang hoạt động</option>
-                <option value="inactive">Tạm dừng</option>
-                <option value="draft">Bản nháp</option>
-              </select>
-            </div>
           </div>
         </form>
       </div>
@@ -509,7 +477,7 @@ watch(() => props.subject, () => {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
+  z-index: 100000;
   display: flex;
   align-items: center;
   justify-content: center;

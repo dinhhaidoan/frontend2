@@ -2,9 +2,9 @@
   <div v-if="isOpen" class="modal-overlay" @click.self="close">
     <div class="modal-container">
       <div class="modal-header">
-        <h2>
+          <h2>
           <i class="fas fa-users"></i>
-          {{ isEdit ? 'Chỉnh sửa lớp hành chính' : 'Tạo lớp hành chính mới' }}
+          {{ isView ? 'Xem chi tiết lớp' : (isEdit ? 'Chỉnh sửa lớp hành chính' : 'Tạo lớp hành chính mới') }}
         </h2>
         <button @click="close" class="btn-close">
           <i class="fas fa-times"></i>
@@ -25,8 +25,10 @@
                   type="text"
                   placeholder="VD: 22IT1"
                   required
-                  :disabled="isEdit"
+                  :disabled="isEdit || isView"
                 />
+                <p v-if="serverErrors.office_class_SKU || serverErrors.code" class="text-error">{{ serverErrors.office_class_SKU || serverErrors.code }}</p>
+                <p v-else-if="clientErrors.value?.code" class="text-error">{{ clientErrors.value.code }}</p>
               </div>
 
               <div class="form-group">
@@ -37,53 +39,36 @@
                   placeholder="VD: Lớp Công nghệ thông tin 1"
                   required
                 />
+                  <p v-if="serverErrors.office_class_name || serverErrors.name" class="text-error">{{ serverErrors.office_class_name || serverErrors.name }}</p>
+                  <p v-else-if="clientErrors.value?.name" class="text-error">{{ clientErrors.value.name }}</p>
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
                 <label>Ngành học <span class="required">*</span></label>
-                <select v-model="formData.major" required>
+                <select v-model.number="formData.major_id" required :disabled="isView || majors.length === 0">
                   <option value="">-- Chọn ngành --</option>
-                  <option value="IT">Công nghệ thông tin</option>
-                  <option value="CS">Khoa học máy tính</option>
-                  <option value="IS">Hệ thống thông tin</option>
-                  <option value="SE">Kỹ thuật phần mềm</option>
-                  <option value="DS">Khoa học dữ liệu</option>
-                  <option value="AI">Trí tuệ nhân tạo</option>
+                  <option v-if="majors.length === 0" disabled>Đang tải danh sách ngành...</option>
+                  <option v-for="m in majors" :key="m.major_id || m.id || m.code" :value="m.major_id || m.id || m.code">{{ m.major_name || m.name }}</option>
                 </select>
+                <p v-if="serverErrors.major_id || serverErrors.major" class="text-error">{{ serverErrors.major_id || serverErrors.major }}</p>
+                <p v-else-if="clientErrors.value?.major" class="text-error">{{ clientErrors.value.major }}</p>
               </div>
 
               <div class="form-group">
                 <label>Khóa học <span class="required">*</span></label>
-                <select v-model="formData.course" required>
-                  <option value="">-- Chọn khóa --</option>
-                  <option value="2022">Khóa 2022</option>
-                  <option value="2023">Khóa 2023</option>
-                  <option value="2024">Khóa 2024</option>
-                  <option value="2025">Khóa 2025</option>
+                <select v-model.number="formData.course" required :disabled="isView || academicYears.length === 0">
+                  <option value="">-- Chọn Khóa / Khóa học --</option>
+                  <option v-if="academicYears.length === 0" disabled>Đang tải danh sách Khóa...</option>
+                  <option v-for="ay in academicYears" :key="ay.id || ay.academic_year_id" :value="Number(ay.id || ay.academic_year_id)">{{ ay.name || ay.academic_year_name }}</option>
                 </select>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Số lượng tối đa</label>
-                <input
-                  v-model.number="formData.maxStudents"
-                  type="number"
-                  placeholder="VD: 50"
-                  min="1"
-                />
-              </div>
-
-              <div class="form-group">
-                <label>Trạng thái</label>
-                <select v-model="formData.status">
-                  <option value="active">Đang hoạt động</option>
-                  <option value="inactive">Ngừng hoạt động</option>
-                  <option value="completed">Đã tốt nghiệp</option>
-                </select>
+                <div v-if="!isView && (!formData.course || formData.course === '') && getCurrentCourseLabel()" class="read-only-note" style="margin-top:8px;color:#6b7280;font-size:13px;">
+                  <i class="fas fa-info-circle"></i>
+                  &nbsp;Khóa hiện tại: <strong>{{ getCurrentCourseLabel() }}</strong> (lookup chưa khớp)
+                </div>
+                <p v-if="serverErrors.academic_year_id || serverErrors.course" class="text-error">{{ serverErrors.academic_year_id || serverErrors.course }}</p>
+                <p v-else-if="clientErrors.value?.course" class="text-error">{{ clientErrors.value.course }}</p>
               </div>
             </div>
           </div>
@@ -94,12 +79,12 @@
             
             <div class="form-group">
               <label>Chọn cố vấn</label>
-              <select v-model="formData.advisorId">
+              <select v-model.number="formData.advisorId" :disabled="isView || advisors.length === 0">
                 <option value="">-- Chưa chọn cố vấn --</option>
-                <option v-for="advisor in advisorList" :key="advisor.id" :value="advisor.id">
-                  {{ advisor.name }} - {{ advisor.department }}
-                </option>
+                <option v-if="advisors.length === 0" disabled>Đang tải danh sách cố vấn...</option>
+                <option v-for="advisor in validAdvisors" :key="advisor.teacher_id || advisor.id" :value="advisor.teacher_id || advisor.id">{{ advisor.display || advisor.name || advisor.user_name }}</option>
               </select>
+              <p v-if="serverErrors.teacher_id || serverErrors.advisorId" class="text-error">{{ serverErrors.teacher_id || serverErrors.advisorId }}</p>
             </div>
 
             <div v-if="formData.advisorId" class="advisor-info">
@@ -114,7 +99,7 @@
           <div class="form-section">
             <h3>
               <i class="fas fa-user-graduate"></i> Sinh viên trong lớp
-              <span class="student-count">({{ selectedStudents.length }}/{{ formData.maxStudents || '∞' }})</span>
+              <span class="student-count">({{ selectedStudents.length }})</span>
             </h3>
 
             <!-- Search và Add Student -->
@@ -126,10 +111,10 @@
                 @input="filterStudents"
               />
               <div class="student-actions">
-                <button type="button" @click="showImportModal = true" class="btn-import-student">
+                <button v-if="!isView" type="button" @click="showImportModal = true" class="btn-import-student">
                   <i class="fas fa-file-import"></i> Import danh sách
                 </button>
-                <button type="button" @click="showAddStudentModal = true" class="btn-add-student">
+                <button v-if="!isView" type="button" @click="showAddStudentModal = true" class="btn-add-student">
                   <i class="fas fa-user-plus"></i> Thêm từng sinh viên
                 </button>
               </div>
@@ -147,7 +132,7 @@
                   <span class="student-name">{{ student.fullName }}</span>
                   <span v-if="student.email" class="student-email">{{ student.email }}</span>
                 </div>
-                <button
+                <button v-if="!isView"
                   type="button"
                   @click="confirmRemoveStudent(student)"
                   class="btn-remove-student"
@@ -180,7 +165,7 @@
             <button type="button" @click="close" class="btn-cancel">
               <i class="fas fa-times"></i> Hủy
             </button>
-            <button type="submit" class="btn-submit" :disabled="!canSubmit">
+            <button type="submit" class="btn-submit" :disabled="!canSubmit || saving">
               <i class="fas fa-save"></i>
               {{ isEdit ? 'Cập nhật' : 'Tạo lớp' }}
             </button>
@@ -303,7 +288,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, toRefs } from 'vue'
 import ImportModal from './ImportModal.vue'
 
 const props = defineProps({
@@ -311,15 +296,45 @@ const props = defineProps({
   officialClass: {
     type: Object,
     default: null
+  },
+  serverErrors: {
+    type: Object,
+    default: () => ({})
+  },
+  saving: {
+    type: Boolean,
+    default: false
+  },
+  advisors: {
+    type: Array,
+    default: () => []
+  },
+  majors: {
+    type: Array,
+    default: () => []
+  },
+  academicYears: {
+    type: Array,
+    default: () => []
+  }
+  ,
+  isView: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['close', 'submit'])
 
+// Use reactive references to props so updates from parent are reflected
+const { advisors, majors, academicYears, isView } = toRefs(props)
+const validAdvisors = computed(() => (advisors?.value || []).filter(a => (a.teacher_id || a.id)))
+
 const formData = ref({
   code: '',
   name: '',
   major: '',
+  major_id: null,
   course: '',
   maxStudents: 50,
   status: 'active',
@@ -413,11 +428,13 @@ const isTempSelected = (studentId) => {
   return tempSelectedStudents.value.includes(studentId)
 }
 
+const clientErrors = ref({})
+
 const canSubmit = computed(() => {
   return (
     formData.value.code &&
     formData.value.name &&
-    formData.value.major &&
+    (formData.value.major_id !== undefined && formData.value.major_id !== null && formData.value.major_id !== '') &&
     formData.value.course
   )
 })
@@ -441,15 +458,77 @@ const resetForm = () => {
 watch(
   () => props.officialClass,
   (newClass) => {
-    if (newClass) {
-      Object.assign(formData.value, newClass)
-      selectedStudents.value = newClass.students || []
+      if (newClass) {
+        Object.assign(formData.value, newClass)
+        // Ensure we map major_id if server returns Major object or major_id
+        formData.value.major_id = newClass.major_id || newClass.major || (newClass.Major && (newClass.Major.major_id || newClass.Major.id)) || null
+        // Map course to academic_year_id when available
+        let courseVal = newClass.academic_year_id || newClass.course || (newClass.AcademicYear && (newClass.AcademicYear.id || newClass.AcademicYear.academic_year_id)) || ''
+        // Resolve course to an academic year id if lookup is available
+        const resolvedCourse = resolveCourseToAcademicYearId(courseVal)
+        console.debug('[OfficialClassModal] watch officialClass mapping: courseVal ->', courseVal, 'resolvedCourse ->', resolvedCourse, 'type ->', typeof resolvedCourse)
+        // If server returns AcademicYear object or academic_year_id, prefer that numeric id
+        const pref = newClass.academic_year_id || (newClass.AcademicYear && (newClass.AcademicYear.id || newClass.AcademicYear.academic_year_id))
+        let finalCourse = (pref !== undefined && pref !== null && pref !== '') ? Number(pref) : resolvedCourse
+        // If resolver returned string and we have academicYears, try to match academicYear by name contains string
+        if ((finalCourse === '' || typeof finalCourse === 'string') && academicYears?.value && academicYears.value.length) {
+          const s = String(finalCourse || courseVal || '').trim()
+          const found = academicYears.value.find(ay => (ay.name || ay.academic_year_name || '').toLowerCase().includes(s.toLowerCase()) || (ay.name || '').toLowerCase() === s.toLowerCase())
+          if (found) finalCourse = Number(found.id)
+        }
+        formData.value.course = finalCourse
+        selectedStudents.value = newClass.students || []
     } else {
       resetForm()
     }
   },
   { immediate: true }
 )
+
+// When academicYears list is updated, try resolving course into an academicYear id again
+watch(academicYears, (newVal) => {
+  if (props.officialClass) {
+    const newClass = props.officialClass
+    const rawCourse = newClass.academic_year_id || newClass.course || (newClass.AcademicYear && (newClass.AcademicYear.id || newClass.AcademicYear.academic_year_id)) || ''
+    const resolved = resolveCourseToAcademicYearId(rawCourse)
+    console.debug('[OfficialClassModal] academicYears watch: academicYears:', academicYears?.value, 'rawCourse:', rawCourse, 'resolved:', resolved)
+    console.debug('[OfficialClassModal] watch academicYears mapping: rawCourse ->', rawCourse, 'resolved ->', resolved, 'formData.course ->', formData.value.course)
+    // If resolved is string and we have academicYears, try to find a matching id by name
+    let finalResolved = resolved
+    if ((finalResolved === '' || typeof finalResolved === 'string') && academicYears?.value && academicYears.value.length) {
+      const s = String(finalResolved || rawCourse || '').trim()
+      const found = academicYears.value.find(ay => (ay.name || ay.academic_year_name || '').toLowerCase().includes(s.toLowerCase()) || (ay.name || '').toLowerCase() === s.toLowerCase())
+      if (found) finalResolved = Number(found.id)
+    }
+    if (finalResolved !== formData.value.course) formData.value.course = finalResolved
+  }
+}, { immediate: true })
+
+// Helper to find an academicYear id from a value that might be 
+// an id, a year (2022), or a name like 'Khóa 2022'. Returns number or string depending.
+function resolveCourseToAcademicYearId(courseVal) {
+  if (courseVal === undefined || courseVal === null || courseVal === '') return ''
+  // If we already have numeric id and it matches an academicYear id, return it
+  const asNumber = Number(courseVal)
+  if (!isNaN(asNumber) && academicYears?.value && academicYears.value.find(ay => Number(ay.id) === asNumber)) return asNumber
+
+  // Try to match by name (case-insensitive)
+  const str = String(courseVal)
+  if (academicYears?.value && academicYears.value.length) {
+    const byName = academicYears.value.find(ay => (ay.name || '').toLowerCase() === str.toLowerCase() || (ay.name || '').toLowerCase().includes(str.toLowerCase()))
+    if (byName) return Number(byName.id)
+
+    // Try to extract 4-digit year and match
+    const y = (str.match(/\d{4}/) || [])[0]
+    if (y) {
+      const byYear = academicYears.value.find(ay => (ay.name || '').includes(y))
+      if (byYear) return Number(byYear.id)
+    }
+  }
+
+  // As final fallback, if it's numeric but didn't match an id, still return the numeric form
+  return !isNaN(asNumber) ? asNumber : courseVal
+}
 
 const toggleTempSelect = (studentId) => {
   const index = tempSelectedStudents.value.indexOf(studentId)
@@ -540,8 +619,32 @@ const handleImportStudents = (importData) => {
 }
 
 const getAdvisorName = (advisorId) => {
-  const advisor = advisorList.value.find((a) => a.id === advisorId)
-  return advisor ? advisor.name : ''
+  const advisor = (validAdvisors.value || []).find((a) => (a.teacher_id || a.id) === advisorId) || (advisors || []).find((a) => (a.teacher_id || a.id) === advisorId)
+  if (advisor) return (advisor.display || advisor.name || advisor.user_name || '')
+  // Fallback to local mock list if provided
+  const mockAdvisor = advisorList.value.find((a) => a.id === advisorId)
+  return mockAdvisor ? mockAdvisor.name : ''
+}
+
+const getCurrentCourseLabel = () => {
+  let val = formData.value.course
+  if (!val && props.officialClass) {
+    // prefer AcademicYear name if present
+    const ac = props.officialClass.AcademicYear || (props.officialClass.AcademicYear && props.officialClass.AcademicYear.name)
+    if (ac && ac.name) return ac.name
+    if (props.officialClass.academic_year_id) {
+      const ay = (academicYears?.value || []).find(a => Number(a.id) === Number(props.officialClass.academic_year_id))
+      if (ay) return ay.name || ay.academic_year_name
+    }
+    if (props.officialClass.course) return String(props.officialClass.course)
+  }
+  if (val) {
+    // find label
+    const ay = (academicYears?.value || []).find(a => Number(a.id) === Number(val))
+    if (ay) return ay.name || ay.academic_year_name
+    return String(val)
+  }
+  return ''
 }
 
 const filterStudents = () => {
@@ -549,6 +652,17 @@ const filterStudents = () => {
 }
 
 const handleSubmit = () => {
+  // Reset errors
+  clientErrors.value = {}
+  // Basic validation
+  if (!formData.value.code || !String(formData.value.code).trim()) clientErrors.value.code = 'Mã lớp bắt buộc'
+  if (!formData.value.name || !String(formData.value.name).trim()) clientErrors.value.name = 'Tên lớp bắt buộc'
+  if (!formData.value.major_id) clientErrors.value.major = 'Ngành học bắt buộc'
+  if (!formData.value.course) clientErrors.value.course = 'Khóa/Academic Year bắt buộc'
+  if (formData.value.maxStudents && Number(formData.value.maxStudents) < 1) clientErrors.value.maxStudents = 'Số lượng tối đa phải >= 1'
+
+  if (Object.keys(clientErrors.value).length) return
+
   const classData = {
     ...formData.value,
     students: selectedStudents.value,
@@ -575,7 +689,7 @@ const close = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100001;
   padding: 20px;
   overflow-y: auto;
 }

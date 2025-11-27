@@ -57,14 +57,9 @@
 
           <div class="filter-group">
             <label><i class="fas fa-book"></i> Ngành</label>
-            <select v-model="filters.major">
+            <select v-model.number="filters.major">
               <option value="">Tất cả ngành</option>
-              <option value="IT">Công nghệ thông tin</option>
-              <option value="CS">Khoa học máy tính</option>
-              <option value="IS">Hệ thống thông tin</option>
-              <option value="SE">Kỹ thuật phần mềm</option>
-              <option value="DS">Khoa học dữ liệu</option>
-              <option value="AI">Trí tuệ nhân tạo</option>
+              <option v-for="m in majors" :key="m.major_id || m.id || m.code" :value="m.major_id || m.id || m.code">{{ m.major_name || m.name }}</option>
             </select>
           </div>
 
@@ -96,6 +91,13 @@
       </div>
 
       <!-- Classes Grid -->
+      <div v-if="classesLoading" class="loading-state">
+        <p>Đang tải danh sách lớp...</p>
+      </div>
+      <div v-else-if="classesError" class="error-banner">
+        <p>Có lỗi khi tải danh sách lớp: {{ (classesError.message || classesError).toString() }}</p>
+        <button @click="retryClasses" class="btn-retry">Thử lại</button>
+      </div>
       <div class="classes-grid">
         <div
           v-for="officialClass in filteredClasses"
@@ -118,7 +120,7 @@
                 <i class="fas fa-edit"></i>
               </button>
               <button
-                @click="deleteClass(officialClass.id)"
+                @click="deleteClass(officialClass)"
                 class="btn-icon delete"
                 title="Xóa"
               >
@@ -133,31 +135,31 @@
             <div class="class-info">
               <div class="info-item">
                 <i class="fas fa-book"></i>
-                <span>{{ getMajorLabel(officialClass.major) }}</span>
+                <span>{{ officialClass.majorName || getMajorLabel(officialClass.major) }}</span>
               </div>
               <div class="info-item">
                 <i class="fas fa-calendar"></i>
-                <span>Khóa {{ officialClass.course }}</span>
+                <span>Khóa {{ getClassAcademicYearLabel(officialClass) || getAcademicYearLabel(officialClass.course) || officialClass.course || 'Chưa có Khóa' }}</span>
               </div>
             </div>
 
             <div class="class-advisor">
               <i class="fas fa-user-tie"></i>
-              <span>{{ officialClass.advisorName || 'Chưa có cố vấn' }}</span>
+              <span>{{ officialClass.advisorName || getAdvisorName(officialClass.advisorId) || 'Chưa có cố vấn' }}</span>
             </div>
 
             <div class="class-stats">
               <div class="stat-item">
                 <i class="fas fa-users"></i>
                 <span>
-                  {{ officialClass.studentCount || 0 }}/{{ officialClass.maxStudents }}
+                  {{ officialClass.studentCount || 0 }}
                 </span>
               </div>
               <div class="progress-bar">
                 <div
                   class="progress-fill"
                   :style="{
-                    width: ((officialClass.studentCount || 0) / officialClass.maxStudents) * 100 + '%'
+                    width: getProgressWidth(officialClass)
                   }"
                 ></div>
               </div>
@@ -185,18 +187,45 @@
     <OfficialClassModal
       :isOpen="showClassModal"
       :officialClass="selectedClass"
+      :advisors="teachers"
+      :majors="majors"
+      :academicYears="academicYears"
+      :serverErrors="serverErrors"
+      :saving="saving"
+      :isView="isViewMode"
       @close="closeClassModal"
       @submit="handleSubmitClass"
+    />
+    <ConfirmDialog
+      :show="confirmDialog.show"
+      :type="confirmDialog.type"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :loading="confirmLoading"
+      confirmText="Xác nhận"
+      @confirm="onConfirm"
+      @cancel="() => { confirmDialog.show = false; confirmDialog.payload = null; confirmDialog.action = null }"
+      @update:show="val => confirmDialog.show = val"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import OfficialClassModal from '@/components/Students-Manager/OfficialClassModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useToast } from '@/composables/useToast'
+import { useOfficeClasses } from '@/hooks/useOfficeClasses'
+import { useTeachers } from '@/hooks/useTeachers'
+import { useAcademicYears } from '@/hooks/useAcademicYears'
+import { useMajors } from '@/hooks/useMajors'
 
 // State
-const classes = ref([])
+const { officeClasses, fetchOfficeClasses, createOfficeClass, updateOfficeClass, deleteOfficeClass, loading: classesLoading, error: classesError } = useOfficeClasses()
+const classes = officeClasses
+  const { teachers, fetchTeachers } = useTeachers()
+const { academicYears, fetchAcademicYears } = useAcademicYears()
+const { majors, fetchMajors } = useMajors()
 const filters = ref({
   search: '',
   major: '',
@@ -206,83 +235,58 @@ const filters = ref({
 
 const showClassModal = ref(false)
 const selectedClass = ref(null)
+const isViewMode = ref(false)
 
-// Mock data
-const mockClasses = [
-  {
-    id: 1,
-    code: '22IT1',
-    name: 'Lớp Công nghệ thông tin 1',
-    major: 'IT',
-    course: '2022',
-    maxStudents: 50,
-    studentCount: 45,
-    status: 'active',
-    advisorId: 1,
-    advisorName: 'TS. Nguyễn Văn A',
-    notes: 'Lớp chuyên ngành AI',
-    students: []
-  },
-  {
-    id: 2,
-    code: '22IT2',
-    name: 'Lớp Công nghệ thông tin 2',
-    major: 'IT',
-    course: '2022',
-    maxStudents: 50,
-    studentCount: 48,
-    status: 'active',
-    advisorId: 2,
-    advisorName: 'ThS. Trần Thị B',
-    notes: '',
-    students: []
-  },
-  {
-    id: 3,
-    code: '23CS1',
-    name: 'Lớp Khoa học máy tính 1',
-    major: 'CS',
-    course: '2023',
-    maxStudents: 45,
-    studentCount: 42,
-    status: 'active',
-    advisorId: 3,
-    advisorName: 'TS. Lê Văn C',
-    notes: '',
-    students: []
-  },
-  {
-    id: 4,
-    code: '21IT1',
-    name: 'Lớp Công nghệ thông tin 1',
-    major: 'IT',
-    course: '2021',
-    maxStudents: 50,
-    studentCount: 50,
-    status: 'completed',
-    advisorId: 4,
-    advisorName: 'PGS.TS. Phạm Thị D',
-    notes: 'Đã tốt nghiệp tháng 6/2025',
-    students: []
-  },
-  {
-    id: 5,
-    code: '24SE1',
-    name: 'Lớp Kỹ thuật phần mềm 1',
-    major: 'SE',
-    course: '2024',
-    maxStudents: 40,
-    studentCount: 38,
-    status: 'active',
-    advisorId: 5,
-    advisorName: 'TS. Hoàng Văn E',
-    notes: '',
-    students: []
+// Server state
+const serverErrors = ref({})
+const saving = ref(false)
+const toast = useToast()
+const confirmDialog = ref({ show: false, type: 'warning', title: '', message: '', payload: null })
+const confirmLoading = ref(false)
+
+// Initialize data from server
+onMounted(async () => {
+  // Use allSettled so one failing lookup (e.g. majors) doesn't break the whole page
+  try {
+    // Ensure academicYears is fetched before office classes to allow mapping
+    const [ayRes] = await Promise.allSettled([fetchAcademicYears()])
+    if (ayRes && ayRes.status === 'rejected') console.warn('Failed to fetch academic years', ayRes)
+    const results = await Promise.allSettled([
+      fetchOfficeClasses(),
+      fetchTeachers(),
+      fetchMajors()
+    ])
+    // Try to attach AcademicYear objects to classes if we have the lookup
+    attachAcademicYearsToClasses()
+    const rejected = results.filter(r => r.status === 'rejected')
+    if (rejected.length) {
+      // Hooks already show toasts; log for debugging
+      console.warn('Some lookups failed during Classes initialization.' , rejected)
+    }
+  } catch (err) {
+    console.error('Initialization error (unexpected):', err)
   }
-]
+})
 
-// Initialize data
-classes.value = mockClasses
+// Re-attach academic years to classes whenever academicYears lookup updates
+watch(academicYears, (newVal) => {
+  if (newVal && newVal.length) attachAcademicYearsToClasses()
+})
+
+// When the classes list is updated (e.g., after create/update/delete), re-attach academicYears
+watch(classes, (newVal) => {
+  if (newVal && newVal.length) attachAcademicYearsToClasses()
+})
+
+const retryClasses = async () => {
+  try {
+    await fetchOfficeClasses()
+    // After fetching, try to attach AcademicYear objects based on resolved academic_year_id/course
+    attachAcademicYearsToClasses()
+  } catch (err) {
+    console.error('Retry fetch classes error:', err)
+  }
+}
 
 // Computed
 const statistics = computed(() => ({
@@ -332,6 +336,42 @@ const getMajorLabel = (major) => {
   return labels[major] || major
 }
 
+const getAcademicYearLabel = (courseOrId) => {
+  if (courseOrId === undefined || courseOrId === null || courseOrId === '') return ''
+  // If courseOrId is numeric id
+  const asNumber = Number(courseOrId)
+  if (!isNaN(asNumber) && academicYears?.value && academicYears.value.length) {
+    const ay = academicYears.value.find(a => Number(a.id) === asNumber)
+    if (ay) return ay.name || ay.academic_year_name || String(courseOrId)
+  }
+  // Try matching by name
+  const s = String(courseOrId).trim()
+  if (academicYears?.value && academicYears.value.length) {
+    const ay = academicYears.value.find(a => (a.name || a.academic_year_name || '').toLowerCase() === s.toLowerCase() || (a.name || a.academic_year_name || '').toLowerCase().includes(s.toLowerCase()))
+    if (ay) return ay.name || ay.academic_year_name
+  }
+  // fallback: show original value
+  return String(courseOrId)
+}
+
+const getClassAcademicYearLabel = (officialClass) => {
+  if (!officialClass) return ''
+  console.debug('[Classes] getClassAcademicYearLabel ->', officialClass)
+  // Prefer included AcademicYear object under several possible keys
+  const ayObj = officialClass.AcademicYear || officialClass.academicYear || officialClass.academic_year || officialClass._AcademicYear || null
+  if (ayObj) return ayObj.name || ayObj.academic_year_name || ayObj.academicYearName || ''
+  // If the mapping included a precomputed name
+  if (officialClass.academicYearName) return officialClass.academicYearName
+  // Try academic_year_id numeric match
+  if (officialClass.academic_year_id || officialClass.academicYearId || officialClass.academicYearID || officialClass.academic_year || officialClass.academic_year_id === 0) {
+    const id = officialClass.academic_year_id || officialClass.academicYearId || officialClass.academicYearID
+    if (id) return getAcademicYearLabel(id)
+  }
+  // fallback to course -> year label
+  if (officialClass.course) return getAcademicYearLabel(officialClass.course)
+  return ''
+}
+
 const getStatusLabel = (status) => {
   const labels = {
     active: 'Đang hoạt động',
@@ -343,18 +383,34 @@ const getStatusLabel = (status) => {
 
 const openAddModal = () => {
   selectedClass.value = null
-  showClassModal.value = true
+  serverErrors.value = {}
+  isViewMode.value = false
+  // Ensure lookups are loaded before opening modal
+  Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
+    showClassModal.value = true
+  })
 }
 
 const editClass = (officialClass) => {
+  console.debug('[Classes] editClass -> officialClass:', officialClass)
   selectedClass.value = { ...officialClass }
-  showClassModal.value = true
+  serverErrors.value = {}
+  isViewMode.value = false
+  // Ensure lookups are loaded before opening modal
+  Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
+    showClassModal.value = true
+  })
 }
 
 const viewClass = (officialClass) => {
-  // Navigate to class detail page or show detail modal
-  console.log('View class:', officialClass)
-  alert(`Chi tiết lớp ${officialClass.code}\nSinh viên: ${officialClass.studentCount}/${officialClass.maxStudents}\nCố vấn: ${officialClass.advisorName}`)
+  console.debug('[Classes] viewClass -> officialClass:', officialClass)
+  selectedClass.value = { ...officialClass }
+  serverErrors.value = {}
+  isViewMode.value = true
+  // Ensure lookups are loaded before opening modal
+  Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
+    showClassModal.value = true
+  })
 }
 
 const manageStudents = (officialClass) => {
@@ -362,51 +418,163 @@ const manageStudents = (officialClass) => {
   editClass(officialClass)
 }
 
-const deleteClass = (classId) => {
-  if (confirm('Bạn có chắc chắn muốn xóa lớp này?')) {
-    classes.value = classes.value.filter((c) => c.id !== classId)
-    alert('Đã xóa lớp thành công!')
+const deleteClass = (officialClass) => {
+  confirmDialog.value = {
+    show: true,
+    type: 'warning',
+    title: 'Xóa lớp',
+    message: `Bạn có chắc chắn muốn xóa lớp "${officialClass.name}" (${officialClass.code})?`,
+    payload: officialClass,
+    action: 'delete'
   }
 }
 
-const handleSubmitClass = (classData) => {
-  if (selectedClass.value) {
-    // Update existing class
-    const index = classes.value.findIndex((c) => c.id === selectedClass.value.id)
-    if (index !== -1) {
-      classes.value[index] = {
-        ...classes.value[index],
-        ...classData,
-        id: selectedClass.value.id
+// Attach AcademicYear object and human-friendly name to each class in classes list,
+// using available academicYears lookup. This is done as a post-processing step
+// because the server's list endpoint may not include the nested AcademicYear object.
+const attachAcademicYearsToClasses = () => {
+  if (!academicYears?.value || !academicYears.value.length) return
+  classes.value = classes.value.map(c => {
+    const out = { ...c }
+    const id = c.academic_year_id || c.academicYearId || c.course
+    if (id) {
+      const ay = academicYears.value.find(a => Number(a.id) === Number(id))
+      if (ay) {
+        out.AcademicYear = ay
+        out.academicYearName = ay.name || ay.academic_year_name || out.academicYearName || ''
       }
-      alert('Đã cập nhật lớp thành công!')
+      // If no exact match, try to match by year string contained in name
+      else {
+        const s = String(id)
+        const ay2 = academicYears.value.find(a => (a.name || a.academic_year_name || '').includes(s))
+        if (ay2) {
+          out.AcademicYear = ay2
+          out.academicYearName = ay2.name || ay2.academic_year_name || out.academicYearName || ''
+        }
+      }
     }
-  } else {
-    // Add new class
-    const newClass = {
-      ...classData,
-      id: Date.now(),
-      advisorName: getAdvisorName(classData.advisorId)
-    }
-    classes.value.push(newClass)
-    alert('Đã tạo lớp mới thành công!')
+    return out
+  })
+}
+
+const performDelete = async () => {
+  console.debug('[Classes] performDelete called ->', confirmDialog.value && confirmDialog.value.payload ? confirmDialog.value.payload.id : null)
+  const cls = confirmDialog.value.payload
+  if (!cls) return
+  confirmDialog.value.show = false
+  confirmDialog.value.payload = null
+  confirmDialog.value.action = null
+  try {
+    confirmLoading.value = true
+    await deleteOfficeClass(cls.id)
+    console.debug('[Classes] deleteOfficeClass response -> deleted id', cls.id)
+    toast.success('Xóa lớp thành công', 'Thành công')
+    if (selectedClass.value && selectedClass.value.id === cls.id) closeClassModal()
+  } catch (err) {
+    serverErrors.value = err?.details || {}
+    toast.error('Có lỗi khi xóa lớp', 'Lỗi')
+    console.error('deleteClass error', err)
   }
 }
 
-const getAdvisorName = (advisorId) => {
-  const advisors = {
-    1: 'TS. Nguyễn Văn A',
-    2: 'ThS. Trần Thị B',
-    3: 'TS. Lê Văn C',
-    4: 'PGS.TS. Phạm Thị D',
-    5: 'TS. Hoàng Văn E'
+const handleSubmitClass = async (classData) => {
+  serverErrors.value = {}
+  saving.value = true
+  try {
+    // Basic pre-checks before calling API
+    if (!classData.advisorId) {
+      serverErrors.value = { teacher_id: 'Cố vấn học tập bắt buộc' }
+      return
+    }
+    if (!classData.course) {
+      serverErrors.value = { academic_year_id: 'Khóa học bắt buộc' }
+      return
+    }
+    if (classData.major_id === undefined || classData.major_id === null || classData.major_id === '') {
+      serverErrors.value = { major_id: 'Ngành học bắt buộc' }
+      return
+    }
+
+    if (selectedClass.value && selectedClass.value.id) {
+      // Ask for confirmation before updating
+      confirmDialog.value = {
+        show: true,
+        type: 'warning',
+        title: 'Cập nhật lớp',
+        message: `Bạn có chắc chắn muốn cập nhật lớp "${selectedClass.value.name}" (${selectedClass.value.code})?`,
+        payload: { id: selectedClass.value.id, data: classData },
+        action: 'update'
+      }
+    } else {
+      await createOfficeClass(classData)
+      toast.success('Tạo lớp thành công', 'Thành công')
+      closeClassModal()
+    }
+  } catch (err) {
+    // Map server validation errors to serverErrors for modal display
+    let mapped = {}
+    if (Array.isArray(err?.details)) {
+      err.details.forEach(d => {
+        if (d && d.field) mapped[d.field] = d.message || d
+      })
+    } else if (err?.details && typeof err.details === 'object') {
+      mapped = err.details
+    } else if (err && typeof err === 'object') {
+      // If server returned stringified JSON in message, try parse
+      try {
+        const parsed = JSON.parse(err.message)
+        if (parsed?.details && Array.isArray(parsed.details)) parsed.details.forEach(d => mapped[d.field] = d.message)
+      } catch (e) {
+        // ignored
+      }
+    }
+    serverErrors.value = mapped
+    console.error('handleSubmitClass error', err)
+  } finally {
+    saving.value = false
   }
-  return advisors[advisorId] || ''
+}
+
+const performUpdate = async () => {
+  console.debug('[Classes] performUpdate called ->', confirmDialog.value && confirmDialog.value.payload ? confirmDialog.value.payload.id : null)
+  const payload = confirmDialog.value.payload
+  if (!payload) return
+  confirmDialog.value.show = false
+  confirmDialog.value.payload = null
+  confirmDialog.value.action = null
+  saving.value = true
+  try {
+    confirmLoading.value = true
+    await updateOfficeClass(payload.id, payload.data)
+    toast.success('Cập nhật lớp thành công', 'Thành công')
+    closeClassModal()
+  } catch (err) {
+    serverErrors.value = err?.details || {}
+    toast.error('Có lỗi khi cập nhật lớp', 'Lỗi')
+    console.error('updateOfficeClass error', err)
+  } finally {
+    saving.value = false
+    confirmLoading.value = false
+  }
+}
+
+const onConfirm = () => {
+  console.debug('[Classes] onConfirm ->', confirmDialog.value)
+  if (!confirmDialog.value || !confirmDialog.value.payload) return
+  if (confirmDialog.value.action === 'update') performUpdate()
+  else performDelete()
+}
+
+  const getAdvisorName = (advisorId) => {
+  const adv = teachers.value.find(t => (t.teacher_id || t.id) === advisorId)
+  return adv ? (adv.display || adv.name || adv.user_name || '') : ''
 }
 
 const closeClassModal = () => {
   showClassModal.value = false
   selectedClass.value = null
+  serverErrors.value = {}
+  isViewMode.value = false
 }
 
 const resetFilters = () => {
@@ -416,6 +584,13 @@ const resetFilters = () => {
     course: '',
     status: ''
   }
+}
+
+const getProgressWidth = (officialClass) => {
+  const studentCount = officialClass?.studentCount || 0
+  const max = officialClass?.maxStudents || Math.max(studentCount, 1)
+  const pct = Math.min(100, Math.round((studentCount / max) * 100))
+  return pct + '%'
 }
 </script>
 

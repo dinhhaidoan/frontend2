@@ -107,6 +107,17 @@
       @close="closeRoomModal"
       @save="saveRoomAssignment"
     />
+    
+    <ConfirmDialog
+      :show="confirmDialog.show"
+      :type="confirmDialog.type"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      confirmText="Xác nhận"
+      cancelText="Hủy"
+      @confirm="confirmDialogConfirm"
+      @cancel="() => { confirmDialog.show = false }"
+    />
 
     <RegistrationModal 
       v-if="showRegistrationModal"
@@ -132,6 +143,7 @@ import SubjectFilters from '@/components/Subjects-Staff/SubjectFilters.vue'
 import SubjectTable from '@/components/Subjects-Staff/SubjectTable.vue'
 import BulkActions from '@/components/Subjects-Staff/BulkActions.vue'
 import SubjectModal from '@/components/Subjects-Staff/SubjectModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import SubjectViewModal from '@/components/Subjects-Staff/SubjectViewModal.vue'
 import TeacherAssignModal from '@/components/Subjects-Staff/TeacherAssignModal.vue'
 import RoomAssignModal from '@/components/Subjects-Staff/RoomAssignModal.vue'
@@ -150,6 +162,7 @@ export default {
     TeacherAssignModal,
     RoomAssignModal,
     RegistrationModal,
+    ConfirmDialog,
     SubjectStudentsModal
   },
   setup() {
@@ -174,6 +187,7 @@ export default {
     const selectedSubjectForStudents = ref(null)
     const viewingSubject = ref(null)
     const isEditMode = ref(false)
+    const confirmDialog = ref({ show: false, type: 'warning', title: '', message: '', payload: null })
 
     // Filters
     const filters = ref({
@@ -470,21 +484,24 @@ export default {
 
     const saveSubject = (subjectData) => {
       if (isEditMode.value) {
-        // Update existing subject
-        const index = subjects.value.findIndex(s => s.id === editingSubject.value.id)
-        if (index > -1) {
-          subjects.value[index] = { ...subjectData }
+        // Show confirmation before updating subject
+        confirmDialog.value = {
+          show: true,
+          type: 'warning',
+          title: 'Xác nhận cập nhật môn học',
+          message: `Bạn có chắc chắn muốn lưu các thay đổi cho môn học "${subjectData.name || subjectData.code}"?`,
+          payload: { action: 'updateSubject', data: subjectData }
         }
-      } else {
-        // Add new subject
-        const newSubject = {
-          ...subjectData,
-          id: Date.now(),
-          registeredCount: 0,
-          createdAt: new Date().toISOString().split('T')[0]
-        }
-        subjects.value.push(newSubject)
+        return
       }
+      // Add new subject
+      const newSubject = {
+        ...subjectData,
+        id: Date.now(),
+        registeredCount: 0,
+        createdAt: new Date().toISOString().split('T')[0]
+      }
+      subjects.value.push(newSubject)
       closeSubjectModal()
     }
 
@@ -543,15 +560,14 @@ export default {
     }
 
     const saveTeacherAssignment = (teacherData) => {
-      selectedSubjects.value.forEach(subject => {
-        const index = subjects.value.findIndex(s => s.id === subject.id)
-        if (index > -1) {
-          subjects.value[index].teacherId = teacherData.teacherId
-          subjects.value[index].teacherName = teacherData.teacherName
-        }
-      })
-      closeTeacherModal()
-      clearSelection()
+      // Show confirmation before assigning teacher
+      confirmDialog.value = {
+        show: true,
+        type: 'warning',
+        title: 'Xác nhận gán giáo viên',
+        message: `Bạn có chắc chắn muốn gán giáo viên "${teacherData.teacherName || '---'}" cho ${selectedSubjects.value.length} môn học đã chọn?`,
+        payload: { action: 'assignTeacher', data: teacherData }
+      }
     }
 
     const closeRoomModal = () => {
@@ -559,15 +575,50 @@ export default {
     }
 
     const saveRoomAssignment = (roomData) => {
-      selectedSubjects.value.forEach(subject => {
-        const index = subjects.value.findIndex(s => s.id === subject.id)
-        if (index > -1) {
-          subjects.value[index].roomId = roomData.roomId
-          subjects.value[index].roomName = roomData.roomName
-        }
-      })
-      closeRoomModal()
-      clearSelection()
+      // Show confirmation before assigning room
+      confirmDialog.value = {
+        show: true,
+        type: 'warning',
+        title: 'Xác nhận gán phòng',
+        message: `Bạn có chắc chắn muốn gán phòng "${roomData.roomName || '---'}" cho ${selectedSubjects.value.length} môn học đã chọn?`,
+        payload: { action: 'assignRoom', data: roomData }
+      }
+    }
+
+    const confirmDialogConfirm = () => {
+      const p = confirmDialog.value.payload
+      if (!p) { confirmDialog.value.show = false; return }
+      if (p.action === 'updateSubject') {
+        const subjectData = p.data
+        const idx = subjects.value.findIndex(s => s.id === editingSubject.value.id)
+        if (idx > -1) subjects.value[idx] = { ...subjectData }
+        closeSubjectModal()
+      }
+      if (p.action === 'assignTeacher') {
+        const teacherData = p.data
+        selectedSubjects.value.forEach(subject => {
+          const index = subjects.value.findIndex(s => s.id === subject.id)
+          if (index > -1) {
+            subjects.value[index].teacherId = teacherData.teacherId
+            subjects.value[index].teacherName = teacherData.teacherName
+          }
+        })
+        closeTeacherModal()
+        clearSelection()
+      }
+      if (p.action === 'assignRoom') {
+        const roomData = p.data
+        selectedSubjects.value.forEach(subject => {
+          const index = subjects.value.findIndex(s => s.id === subject.id)
+          if (index > -1) {
+            subjects.value[index].roomId = roomData.roomId
+            subjects.value[index].roomName = roomData.roomName
+          }
+        })
+        closeRoomModal()
+        clearSelection()
+      }
+      confirmDialog.value.show = false
     }
 
     // Registration methods
@@ -673,6 +724,8 @@ export default {
       saveTeacherAssignment,
       closeRoomModal,
       saveRoomAssignment,
+      confirmDialog,
+      confirmDialogConfirm,
       openRegistrationModal,
       closeRegistrationModal,
       saveRegistrationConfig,

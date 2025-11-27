@@ -8,67 +8,6 @@
         <i class="fas fa-angle-right"></i>
         <span class="current">Chương trình đào tạo</span>
       </div>
-      
-      <!-- Semester Management Section -->
-      <div class="semester-management">
-        <div class="semester-header">
-          <h3>
-            <i class="fas fa-calendar-alt"></i>
-            Quản lý học kỳ
-          </h3>
-          <button @click="openSemesterModal" class="btn-add-semester">
-            <i class="fas fa-plus"></i>
-            Tạo học kỳ
-          </button>
-        </div>
-        
-        <div class="semester-list">
-          <div 
-            v-for="semester in semesters" 
-            :key="semester.id"
-            class="semester-card"
-          >
-            <div class="semester-info">
-              <div class="semester-name">{{ semester.name }}</div>
-              <div class="semester-meta">
-                <span class="semester-period">{{ semester.startDate }} - {{ semester.endDate }}</span>
-                <span class="semester-status" :class="semester.status">{{ getStatusLabel(semester.status) }}</span>
-              </div>
-            </div>
-            <div class="semester-stats">
-              <div class="stat-item">
-                <span class="stat-value">{{ semester.subjectCount || 0 }}</span>
-                <span class="stat-label">môn</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-value">{{ semester.maxCredits }}</span>
-                <span class="stat-label">TC</span>
-              </div>
-            </div>
-            <div class="semester-actions">
-              <button @click="viewSemesterDetail(semester)" class="action-btn view">
-                <i class="fas fa-eye"></i>
-              </button>
-              <button @click="editSemester(semester)" class="action-btn edit">
-                <i class="fas fa-edit"></i>
-              </button>
-              <button @click="deleteSemester(semester)" class="action-btn delete">
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          </div>
-          
-          <!-- Empty state -->
-          <div v-if="semesters.length === 0" class="empty-semesters">
-            <i class="fas fa-calendar-plus"></i>
-            <p>Chưa có học kỳ nào</p>
-            <button @click="openSemesterModal" class="btn-create-first">
-              Tạo học kỳ đầu tiên
-            </button>
-          </div>
-        </div>
-      </div>
-      
       <div class="header-main">
         <div class="title-section">
           <h1>
@@ -252,197 +191,37 @@
       @edit-subject="handleEditFromView"
     />
 
-    <!-- Delete Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="deleteModalVisible" class="modal-overlay-delete" @click="closeDeleteModal">
-        <div class="delete-modal-popup" @click.stop>
-          <button @click="closeDeleteModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="delete-icon-wrapper">
-            <div class="delete-icon-animated">
-              <i class="fas fa-exclamation-triangle"></i>
-            </div>
-          </div>
-          
-          <h3 class="delete-title">Xác nhận xóa môn học</h3>
-          
-          <div class="delete-content">
-            <div class="subject-info-delete">
-              <div class="subject-code-delete">{{ subjectToDelete?.code }}</div>
-              <div class="subject-name-delete">{{ subjectToDelete?.name }}</div>
-            </div>
-            
-            <div class="warning-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Hành động này không thể hoàn tác. Tất cả dữ liệu liên quan sẽ bị xóa vĩnh viễn.</span>
-            </div>
-          </div>
-          
-          <div class="delete-actions">
-            <button @click="closeDeleteModal" class="btn-cancel-delete">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmDelete" class="btn-confirm-delete">
-              <i class="fas fa-trash-alt"></i>
-              Xác nhận xóa
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Delete Semester Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="deleteSemesterModalVisible" class="modal-overlay-delete" @click="closeDeleteSemesterModal">
-        <div class="delete-modal-popup" @click.stop>
-          <button @click="closeDeleteSemesterModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="delete-icon-wrapper">
-            <div class="delete-icon-animated">
-              <i class="fas fa-calendar-times"></i>
-            </div>
-          </div>
-          
-          <h3 class="delete-title">Xác nhận xóa học kỳ</h3>
-          
-          <div class="delete-content">
-            <div class="subject-info-delete">
-              <div class="semester-name-delete">{{ semesterToDelete?.name }}</div>
-              <div class="semester-meta-delete">
-                <span><i class="fas fa-calendar-alt"></i> {{ semesterToDelete?.startDate }} - {{ semesterToDelete?.endDate }}</span>
-                <span><i class="fas fa-book"></i> {{ semesterToDelete?.subjectCount || 0 }} môn học</span>
-              </div>
-            </div>
-            
-            <div class="warning-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Hành động này không thể hoàn tác. Tất cả dữ liệu học kỳ và môn học liên quan sẽ bị xóa vĩnh viễn.</span>
-            </div>
-          </div>
-          
-          <div class="delete-actions">
-            <button @click="closeDeleteSemesterModal" class="btn-cancel-delete">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmDeleteSemester" class="btn-confirm-delete">
-              <i class="fas fa-trash-alt"></i>
-              Xác nhận xóa
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Update Subject Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateSubjectModalVisible" class="modal-overlay-delete" @click="closeUpdateSubjectModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateSubjectModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-edit"></i>
-            </div>
-          </div>
-          
-          <h3 class="update-title">Xác nhận cập nhật môn học</h3>
-          
-          <div class="update-content">
-            <div class="subject-info-update">
-              <div class="subject-code-update">{{ subjectToUpdate?.code }}</div>
-              <div class="subject-name-update">{{ subjectToUpdate?.name }}</div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Bạn có chắc chắn muốn lưu các thay đổi cho môn học này?</span>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateSubjectModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateSubject" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Update Semester Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateSemesterModalVisible" class="modal-overlay-delete" @click="closeUpdateSemesterModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateSemesterModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-calendar-check"></i>
-            </div>
-          </div>
-          
-          <h3 class="update-title">Xác nhận cập nhật học kỳ</h3>
-          
-          <div class="update-content">
-            <div class="subject-info-update">
-              <div class="semester-name-update">{{ semesterToUpdate?.name }}</div>
-              <div class="semester-meta-update">
-                <span><i class="fas fa-calendar-alt"></i> {{ semesterToUpdate?.startDate }} - {{ semesterToUpdate?.endDate }}</span>
-                <span><i class="fas fa-graduation-cap"></i> Tối đa {{ semesterToUpdate?.maxCredits }} tín chỉ</span>
-              </div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <span>Bạn có chắc chắn muốn lưu các thay đổi cho học kỳ này?</span>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateSemesterModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateSemester" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Old semester modal removed - now using SemesterModal component -->
-
-    <!-- Semester Modals -->
-    <SemesterModal 
-      :is-visible="semesterModalVisible"
-      :mode="semesterModalMode"
-      :semester="selectedSemester"
-      @close="closeSemesterModal"
-      @save="handleSemesterSave"
+    <!-- Delete Confirmation (shared ConfirmDialog) -->
+    <ConfirmDialog
+      :show="deleteModalVisible"
+      type="danger"
+      title="Xác nhận xóa môn học"
+      :message="subjectToDelete ? `Bạn có chắc muốn xóa môn học ${subjectToDelete.name} (${subjectToDelete.code})? Hành động này sẽ xóa tất cả dữ liệu liên quan.` : 'Bạn có chắc muốn xóa môn học này?'
+      "
+      confirmText="Xóa"
+      cancelText="Hủy"
+      @confirm="confirmDelete"
+      @cancel="closeDeleteModal"
     />
 
-    <SemesterDetailModal 
-      :is-visible="semesterDetailModalVisible"
-      :semester="selectedSemesterDetail"
-      @close="closeSemesterDetailModal"
-      @edit="handleEditFromDetail"
+    <!-- Delete Semester confirmation removed; managed in AcademicYears page -->
+
+    <!-- Update Subject confirmation using ConfirmDialog -->
+    <ConfirmDialog
+      :show="updateSubjectModalVisible"
+      type="warning"
+      title="Xác nhận cập nhật môn học"
+      :message="subjectToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho môn học ${subjectToUpdate.name || subjectToUpdate.code}?` : 'Bạn có chắc chắn muốn cập nhật môn học này?'
+      "
+      confirmText="Xác nhận"
+      cancelText="Hủy"
+      @confirm="confirmUpdateSubject"
+      @cancel="closeUpdateSubjectModal"
     />
+
+    <!-- Update Semester confirmation removed; managed in AcademicYears page -->
+
+    <!-- Semester modal components removed; managed in AcademicYears page -->
   </div>
 </template>
 
@@ -452,8 +231,8 @@ import SubjectStats from '../../components/FrameworkSubject-Staff/SubjectStats.v
 import SubjectFilters from '../../components/FrameworkSubject-Staff/SubjectFilters.vue'
 import SubjectTable from '../../components/FrameworkSubject-Staff/SubjectTable.vue'
 import SubjectModal from '../../components/FrameworkSubject-Staff/SubjectModal.vue'
-import SemesterModal from '../../components/FrameworkSubject-Staff/SemesterModal.vue'
-import SemesterDetailModal from '../../components/FrameworkSubject-Staff/SemesterDetailModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+// Semester components moved to AcademicYears page
 
 // State
 const viewMode = ref('table')
@@ -462,62 +241,16 @@ const modalMode = ref('add')
 const selectedSubject = ref(null)
 const deleteModalVisible = ref(false)
 const subjectToDelete = ref(null)
+// Shared confirm dialog state
+const confirmModalVisible = ref(false)
+const confirmModalType = ref('danger')
+const confirmModalTitle = ref('')
+const confirmModalMessage = ref('')
 const updateSubjectModalVisible = ref(false)
 const subjectToUpdate = ref(null)
-const deleteSemesterModalVisible = ref(false)
-const semesterToDelete = ref(null)
-const updateSemesterModalVisible = ref(false)
-const semesterToUpdate = ref(null)
-const semesterModalVisible = ref(false)
-const semesterDetailModalVisible = ref(false)
-const selectedSemester = ref(null)
-const selectedSemesterDetail = ref(null)
-const semesterModalMode = ref('create') // 'create' or 'edit'
+// Semester state removed - now managed => see `AcademicYears.vue`
 
-// Semester form
-const semesterForm = reactive({
-  name: '',
-  academicYear: '',
-  semester: '',
-  startDate: '',
-  endDate: '',
-  maxCredits: 20,
-  description: ''
-})
-
-// Semesters data
-const semesters = ref([
-  {
-    id: 1,
-    name: 'Học kỳ 1 - Năm 1',
-    academicYear: 1,
-    semester: 1,
-    startDate: '2024-09-01',
-    endDate: '2025-01-15',
-    maxCredits: 22,
-    status: 'active',
-    subjectCount: 5,
-    subjects: [
-      { id: 1, code: 'IT101', name: 'Nhập môn Công nghệ thông tin', credits: 3, type: 'required' },
-      { id: 2, code: 'MATH101', name: 'Toán cao cấp A1', credits: 3, type: 'required' },
-      { id: 3, code: 'ENG101', name: 'Tiếng Anh 1', credits: 3, type: 'required' },
-      { id: 4, code: 'PHY101', name: 'Vật lý đại cương', credits: 3, type: 'required' },
-      { id: 5, code: 'PE101', name: 'Giáo dục thể chất', credits: 2, type: 'required' }
-    ]
-  },
-  {
-    id: 2,
-    name: 'Học kỳ 2 - Năm 1',
-    academicYear: 1,
-    semester: 2,
-    startDate: '2025-02-01',
-    endDate: '2025-06-15',
-    maxCredits: 20,
-    status: 'upcoming',
-    subjectCount: 0,
-    subjects: []
-  }
-])
+// Semesters are managed on the AcademicYears page
 
 // Filters
 const filters = reactive({
@@ -784,108 +517,7 @@ const importData = () => {
   // Implement import logic
 }
 
-// Semester Modal Methods
-const openSemesterModal = () => {
-  semesterModalMode.value = 'create'
-  selectedSemester.value = null
-  semesterModalVisible.value = true
-}
-
-const closeSemesterModal = () => {
-  semesterModalVisible.value = false
-  selectedSemester.value = null
-}
-
-const handleSemesterSave = (formData) => {
-  if (semesterModalMode.value === 'create') {
-    // Create new semester
-    const newSemester = {
-      id: Date.now(),
-      name: formData.name,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      maxCredits: parseInt(formData.maxCredits),
-      status: 'upcoming',
-      subjectCount: 0,
-      subjects: []
-    }
-    semesters.value.push(newSemester)
-    showNotification(`Học kỳ "${newSemester.name}" đã được tạo thành công!`, 'success')
-    closeSemesterModal()
-  } else {
-    // Show update confirmation modal
-    semesterToUpdate.value = {
-      ...formData,
-      maxCredits: parseInt(formData.maxCredits)
-    }
-    updateSemesterModalVisible.value = true
-  }
-}
-
-const closeUpdateSemesterModal = () => {
-  updateSemesterModalVisible.value = false
-  semesterToUpdate.value = null
-}
-
-const confirmUpdateSemester = () => {
-  if (!semesterToUpdate.value) return
-  
-  const index = semesters.value.findIndex(s => s.id === semesterToUpdate.value.id)
-  if (index > -1) {
-    Object.assign(semesters.value[index], {
-      name: semesterToUpdate.value.name,
-      startDate: semesterToUpdate.value.startDate,
-      endDate: semesterToUpdate.value.endDate,
-      maxCredits: semesterToUpdate.value.maxCredits
-    })
-    showNotification(`Học kỳ "${semesterToUpdate.value.name}" đã được cập nhật thành công!`, 'success')
-  }
-  closeUpdateSemesterModal()
-  closeSemesterModal()
-}
-
-const editSemester = (semester) => {
-  semesterModalMode.value = 'edit'
-  selectedSemester.value = semester
-  semesterModalVisible.value = true
-}
-
-// Semester Detail Modal Methods
-const viewSemesterDetail = (semester) => {
-  selectedSemesterDetail.value = semester
-  semesterDetailModalVisible.value = true
-}
-
-const closeSemesterDetailModal = () => {
-  semesterDetailModalVisible.value = false
-  selectedSemesterDetail.value = null
-}
-
-const handleEditFromDetail = (semester) => {
-  closeSemesterDetailModal()
-  editSemester(semester)
-}
-
-const deleteSemester = (semester) => {
-  semesterToDelete.value = semester
-  deleteSemesterModalVisible.value = true
-}
-
-const closeDeleteSemesterModal = () => {
-  deleteSemesterModalVisible.value = false
-  semesterToDelete.value = null
-}
-
-const confirmDeleteSemester = () => {
-  if (!semesterToDelete.value) return
-  
-  const index = semesters.value.findIndex(s => s.id === semesterToDelete.value.id)
-  if (index > -1) {
-    semesters.value.splice(index, 1)
-    showNotification(`Đã xóa học kỳ "${semesterToDelete.value.name}" thành công`, 'success')
-  }
-  closeDeleteSemesterModal()
-}
+// Semester logic removed — this area has been moved to the new AcademicYears page.
 
 const getStatusLabel = (status) => {
   const labels = {
@@ -1368,7 +1000,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100001;
   padding: 20px;
 }
 

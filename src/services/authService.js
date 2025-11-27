@@ -11,43 +11,67 @@ class AuthService {
     try {
       const response = await fetch(`${API_BASE_URL}/share/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Important: include credentials so browser accepts HttpOnly Set-Cookie from server
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          user_code,
-          user_password
-        })
+        body: JSON.stringify({ user_code, user_password })
       })
-      
       if (!response.ok) {
-        const error = await response.json()
+        const error = await response.json().catch(() => ({}))
         throw new Error(error.message || 'Đăng nhập thất bại')
       }
-      
       return await response.json()
     } catch (error) {
       console.error('AuthService login error:', error)
       throw error
     }
   }
-
-  async logout(token) {
+  async listMajors() {
     try {
-      // Call server logout endpoint which clears the cookie. Use credentials so
-      // the cookie is sent and cleared on the server side. Do not rely on
-      // Authorization header when server uses HttpOnly cookies.
-      await fetch(`${API_BASE_URL}/share/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
+      const res = await fetch(`${API_BASE_URL}/share/auth/majors`, { method: 'GET', credentials: 'include' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.json()
+    } catch (err) {
+      // Log server error and rethrow with more context so callers can decide how to handle
+      console.error('AuthService.listMajors error:', err)
+      // Try to include details if the server sent JSON
+      if (err instanceof Error) {
+        try {
+          const json = await (await fetch(`${API_BASE_URL}/share/auth/majors`, { method: 'GET', credentials: 'include' })).json().catch(() => null)
+          if (json) {
+            const e = new Error(json.message || json.error || err.message)
+            e.details = json.details || json.errors || null
+            throw e
+          }
+        } catch (e) {
+          // fallback: rethrow original
         }
-      })
-    } catch (error) {
-      console.error('AuthService logout error:', error)
+      }
+      throw err
+    }
+  }
+
+  // Logout (invalidate session server-side or revoke token)
+  async logout() {
+    try {
+      // Try POST /share/auth/logout or fallback to GET/DELETE if needed
+      const url = `${API_BASE_URL}/share/auth/logout`
+      let res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } })
+      if (!res.ok && res.status === 404) {
+        res = await fetch(url, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' } })
+      }
+      // If still not ok, log but do not throw: allow frontend to clear local state
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        console.warn('AuthService.logout: server returned non-OK status', res.status, txt)
+        return { success: false }
+      }
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) return await res.json()
+      return { success: true }
+    } catch (err) {
+      console.error('AuthService.logout error:', err)
+      // Don't break UI on logout; continue to clear frontend auth
+      return { success: false }
     }
   }
 

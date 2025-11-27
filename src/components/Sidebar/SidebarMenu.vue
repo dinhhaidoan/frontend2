@@ -209,6 +209,11 @@ const menuItemsByRole = {
       icon: 'fas fa-chalkboard-teacher'
     },
     {
+      id: 'staff-academic-years',
+      label: 'Khóa học & Học kỳ',
+      icon: 'fas fa-calendar-alt'
+    },
+    {
       id: 'staff-notes',
       label: 'Ghi chú',
       icon: 'fas fa-sticky-note',

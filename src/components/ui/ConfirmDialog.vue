@@ -113,6 +113,7 @@ const typeClass = computed(() => {
 })
 
 const handleConfirm = () => {
+  console.debug('[ConfirmDialog] handleConfirm')
   emit('confirm')
 }
 

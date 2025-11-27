@@ -7,274 +7,145 @@
         <i class="fas fa-chevron-right"></i>
         <span class="current">Giảng viên</span>
       </div>
-      
+
       <div class="header-content">
         <div class="page-title">
-          <h1>
-            <i class="fas fa-chalkboard-teacher"></i>
-            Quản lý giảng viên
-          </h1>
-          <p>Quản lý danh sách giảng viên, thông tin cá nhân và phân công giảng dạy</p>
+          <h1><i class="fas fa-chalkboard-teacher"></i> Quản lý Giảng viên</h1>
+          <p>Quản lý thông tin giảng viên của hệ thống</p>
         </div>
-        
+
         <div class="header-actions">
-          <button @click="importTeachers" class="btn-import">
+          <button class="btn-import" @click="importTeachers">
             <i class="fas fa-upload"></i>
-            Import Excel
+            Import
           </button>
-          <button @click="openAddTeacherModal" class="btn-primary">
+
+          <button class="btn-primary" @click="openAddTeacherModal">
             <i class="fas fa-plus"></i>
             Thêm giảng viên
           </button>
         </div>
       </div>
     </div>
-    
-    <!-- Statistics -->
-    <TeacherStats :statistics="statistics" />
-    
-    <!-- Filters -->
-    <TeacherFilters 
-      :filters="filters"
-      @update:filters="updateFilters"
-      @reset="resetFilters"
-    />
-    
+
+    <!-- Top stats and filters -->
+    <TeacherStats :stats="statistics" />
+
+    <div class="top-controls" style="margin-top: 16px; display:flex; gap:16px; align-items:flex-start;">
+      <TeacherFilters :filters="filters" @updateFilters="updateFilters" @resetFilters="resetFilters" />
+
+      <div style="flex:1">
+        <TeacherBulkActions
+          :selectedIds="selectedTeachers"
+          @exportSelected="exportSelected"
+          @bulkChangeStatus="bulkChangeStatus"
+          @bulkChangeDepartment="bulkChangeDepartment"
+          @bulkSendNotification="bulkSendNotification"
+          @bulkDelete="bulkDeleteTeachers"
+        />
+      </div>
+    </div>
+
     <!-- Table -->
-    <TeacherTable 
+    <TeacherTable
       :teachers="teachers"
-      :filtered-teachers="filteredTeachers"
-      :selected-teachers="selectedTeachers"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @selection-change="handleTeacherSelection"
-      @page-change="handlePageChange"
+      :filteredTeachers="filteredTeachers"
+      :loading="loading"
+      :selected="selectedTeachers"
+      @select="handleTeacherSelection"
       @view="viewTeacher"
       @edit="editTeacher"
-      @delete="deleteTeacher"
+      @delete="promptDeleteTeacher"
       @suspend="suspendTeacher"
       @activate="activateTeacher"
-      @export="exportData"
     />
-    
-    <!-- Bulk Actions -->
-    <TeacherBulkActions 
-      :selected-teachers="selectedTeachers"
-      @clear-selection="clearSelection"
-      @export-selected="exportSelected"
-      @change-status="bulkChangeStatus"
-      @change-department="bulkChangeDepartment"
-      @send-notification="bulkSendNotification"
-      @delete-selected="bulkDeleteTeachers"
-    />
-    
+
     <!-- Modals -->
-    <TeacherModal 
-      :is-open="showTeacherModal"
+    <TeacherModal
+      v-if="showTeacherModal"
+      :isOpen="showTeacherModal"
       :teacher="editingTeacher"
       :is-edit="isEditMode"
       @close="closeTeacherModal"
       @save="saveTeacher"
     />
-    
-    <TeacherViewModal 
-      :is-open="showViewModal"
+
+    <TeacherViewModal
+      v-if="showViewModal"
+      :isOpen="showViewModal"
       :teacher="viewingTeacher"
       @close="closeViewModal"
       @edit="editTeacherFromView"
     />
-    
-    <!-- Delete Teacher Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="deleteTeacherModalVisible" class="modal-overlay-delete" @click="closeDeleteTeacherModal">
-        <div class="delete-modal-popup" @click.stop>
-          <button @click="closeDeleteTeacherModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="delete-icon-wrapper">
-            <div class="delete-icon-animated">
-              <i class="fas fa-user-times"></i>
-            </div>
-          </div>
-          
-          <h2 class="delete-title">Xác nhận xóa giảng viên</h2>
-          
-          <div class="delete-content">
-            <div class="subject-info-delete" v-if="teacherToDelete">
-              <div class="subject-code-delete">{{ teacherToDelete.code }}</div>
-              <div class="subject-name-delete">{{ teacherToDelete.name }}</div>
-              <div class="schedule-meta-delete">
-                <span><i class="fas fa-building"></i> {{ getDepartmentName(teacherToDelete.department) }}</span>
-                <span><i class="fas fa-graduation-cap"></i> {{ getAcademicRankName(teacherToDelete.academicRank) }}</span>
-                <span><i class="fas fa-envelope"></i> {{ teacherToDelete.email }}</span>
-                <span v-if="teacherToDelete.phone"><i class="fas fa-phone"></i> {{ teacherToDelete.phone }}</span>
-              </div>
-            </div>
-            
-            <div class="warning-box">
-              <i class="fas fa-exclamation-triangle"></i>
-              <div>
-                <strong>Cảnh báo:</strong> Hành động này không thể hoàn tác. Việc xóa giảng viên sẽ ảnh hưởng đến các lớp học và môn học được phân công.
-              </div>
-            </div>
-          </div>
-          
-          <div class="delete-actions">
-            <button @click="closeDeleteTeacherModal" class="btn-cancel-delete">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmDeleteTeacher" class="btn-confirm-delete">
-              <i class="fas fa-trash-alt"></i>
-              Xóa giảng viên
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-    
-    <!-- Update Teacher Confirmation Modal -->
-    <Transition name="modal-fade">
-      <div v-if="updateTeacherModalVisible" class="modal-overlay-delete" @click="closeUpdateTeacherModal">
-        <div class="update-modal-popup" @click.stop>
-          <button @click="closeUpdateTeacherModal" class="close-modal-btn">
-            <i class="fas fa-times"></i>
-          </button>
-          
-          <div class="update-icon-wrapper">
-            <div class="update-icon-animated">
-              <i class="fas fa-user-check"></i>
-            </div>
-          </div>
-          
-          <h2 class="update-title">Xác nhận cập nhật giảng viên</h2>
-          
-          <div class="update-content">
-            <div class="subject-info-update" v-if="teacherToUpdate">
-              <div class="subject-code-update">{{ teacherToUpdate.code }}</div>
-              <div class="subject-name-update">{{ teacherToUpdate.name }}</div>
-              <div class="schedule-meta-update">
-                <span><i class="fas fa-building"></i> {{ getDepartmentName(teacherToUpdate.department) }}</span>
-                <span><i class="fas fa-graduation-cap"></i> {{ getAcademicRankName(teacherToUpdate.academicRank) }}</span>
-                <span><i class="fas fa-envelope"></i> {{ teacherToUpdate.email }}</span>
-                <span v-if="teacherToUpdate.phone"><i class="fas fa-phone"></i> {{ teacherToUpdate.phone }}</span>
-              </div>
-            </div>
-            
-            <div class="info-box">
-              <i class="fas fa-info-circle"></i>
-              <div>
-                Bạn có chắc chắn muốn cập nhật thông tin giảng viên này không? Vui lòng kiểm tra lại các thông tin trước khi xác nhận.
-              </div>
-            </div>
-          </div>
-          
-          <div class="update-actions">
-            <button @click="closeUpdateTeacherModal" class="btn-cancel-update">
-              <i class="fas fa-times"></i>
-              Hủy bỏ
-            </button>
-            <button @click="confirmUpdateTeacher" class="btn-confirm-update">
-              <i class="fas fa-check"></i>
-              Xác nhận cập nhật
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-    
-    <!-- Import Modal -->
-    <div v-if="showImportModal" class="modal-overlay" @click="closeImportModal">
+
+    <!-- Delete confirmation (ConfirmDialog) -->
+    <ConfirmDialog
+      :show="deleteTeacherModalVisible"
+      type="danger"
+      title="Xóa giảng viên"
+      :message="teacherToDelete ? `Bạn có chắc muốn xóa giảng viên ${teacherToDelete.name || teacherToDelete.code || teacherToDelete.user_code}? Hành động sẽ không thể hoàn tác.` : 'Bạn có chắc muốn xóa giảng viên này?'
+      "
+      confirmText="Xóa"
+      cancelText="Hủy"
+      :loading="deleting"
+      @confirm="confirmDeleteTeacher"
+      @cancel="closeDeleteTeacherModal"
+    />
+
+    <!-- Update confirmation (ConfirmDialog) -->
+    <ConfirmDialog
+      :show="updateTeacherModalVisible"
+      type="warning"
+      title="Xác nhận cập nhật giảng viên"
+      :message="teacherToUpdate ? `Bạn có chắc chắn muốn cập nhật giảng viên ${teacherToUpdate.name || teacherToUpdate.code}?` : 'Bạn có chắc chắn muốn cập nhật giảng viên này?'
+      "
+      confirmText="Xác nhận"
+      cancelText="Hủy bỏ"
+      :loading="updating"
+      @confirm="confirmUpdateTeacher"
+      @cancel="closeUpdateTeacherModal"
+    />
+
+    <!-- Import modal -->
+    <div v-if="showImportModal" class="modal-overlay" @click.self="closeImportModal">
       <div class="modal-container" @click.stop>
         <div class="modal-header">
-          <h3>
-            <i class="fas fa-upload"></i>
-            Import danh sách giảng viên
-          </h3>
-          <button @click="closeImportModal" class="btn-close">
-            <i class="fas fa-times"></i>
-          </button>
+          <h3><i class="fas fa-upload"></i> Import danh sách giảng viên</h3>
+          <button @click="closeImportModal" class="btn-close"><i class="fas fa-times"></i></button>
         </div>
-        
         <div class="modal-body">
           <div class="import-section">
             <h4>Tải file mẫu</h4>
             <p>Tải file Excel mẫu để xem định dạng dữ liệu cần thiết</p>
-            <button @click="downloadTemplate" class="btn-download">
-              <i class="fas fa-download"></i>
-              Tải file mẫu Excel
-            </button>
+            <button @click="downloadTemplate" class="btn-download"><i class="fas fa-download"></i> Tải file mẫu Excel</button>
           </div>
-          
+
           <div class="import-section">
             <h4>Chọn file import</h4>
-            <div 
-              class="file-drop-zone"
-              :class="{ 'drag-over': isDragOver }"
-              @drop="handleFileDrop"
-              @dragover.prevent
-              @dragenter="isDragOver = true"
-              @dragleave="isDragOver = false"
-            >
+            <div class="file-drop-zone" :class="{ 'drag-over': isDragOver }" @drop="handleFileDrop" @dragover.prevent @dragenter="isDragOver = true" @dragleave="isDragOver = false">
               <div v-if="!selectedFile" class="drop-content">
                 <i class="fas fa-cloud-upload-alt"></i>
                 <p>Kéo thả file Excel vào đây hoặc</p>
-                <button @click="$refs.fileInput.click()" class="btn-select-file">
-                  Chọn file
-                </button>
+                <button @click="$refs.fileInput.click()" class="btn-select-file">Chọn file</button>
               </div>
-              
               <div v-else class="file-selected">
                 <i class="fas fa-file-excel"></i>
-                <div class="file-info">
-                  <h5>{{ selectedFile.name }}</h5>
-                  <p>{{ formatFileSize(selectedFile.size) }}</p>
-                </div>
-                <button @click="clearFile" class="btn-remove">
-                  <i class="fas fa-times"></i>
-                </button>
+                <div class="file-info"><h5>{{ selectedFile.name }}</h5><p>{{ formatFileSize(selectedFile.size) }}</p></div>
+                <button @click="clearFile" class="btn-remove"><i class="fas fa-times"></i></button>
               </div>
             </div>
-            
-            <input 
-              ref="fileInput"
-              type="file" 
-              accept=".xlsx,.xls,.csv"
-              @change="handleFileSelect"
-              style="display: none"
-            />
+            <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleFileSelect" style="display: none" />
           </div>
-          
+
           <div class="import-options">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="importOptions.skipDuplicates" />
-              Bỏ qua giảng viên trùng lặp (theo email)
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="importOptions.sendWelcomeEmail" />
-              Gửi email chào mừng cho giảng viên mới
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="importOptions.autoGeneratePassword" />
-              Tự động tạo mật khẩu cho tài khoản mới
-            </label>
+            <label class="checkbox-label"><input type="checkbox" v-model="importOptions.skipDuplicates" /> Bỏ qua giảng viên trùng lặp (theo email)</label>
+            <label class="checkbox-label"><input type="checkbox" v-model="importOptions.sendWelcomeEmail" /> Gửi email chào mừng cho giảng viên mới</label>
+            <label class="checkbox-label"><input type="checkbox" v-model="importOptions.autoGeneratePassword" /> Tự động tạo mật khẩu cho tài khoản mới</label>
           </div>
         </div>
-        
         <div class="modal-footer">
-          <button @click="closeImportModal" class="btn-cancel">
-            <i class="fas fa-times"></i>
-            Hủy bỏ
-          </button>
-          <button 
-            @click="processImport" 
-            class="btn-import-process"
-            :disabled="!selectedFile"
-          >
-            <i class="fas fa-upload"></i>
-            Import dữ liệu
-          </button>
+          <button @click="closeImportModal" class="btn-cancel"><i class="fas fa-times"></i> Hủy bỏ</button>
+          <button @click="processImport" class="btn-import-process" :disabled="!selectedFile"><i class="fas fa-upload"></i> Import dữ liệu</button>
         </div>
       </div>
     </div>
@@ -289,6 +160,9 @@ import TeacherTable from '@/components/Teachers-Manager/TeacherTable.vue'
 import TeacherBulkActions from '@/components/Teachers-Manager/TeacherBulkActions.vue'
 import TeacherModal from '@/components/Teachers-Manager/TeacherModal.vue'
 import TeacherViewModal from '@/components/Teachers-Manager/TeacherViewModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useTeachers } from '@/hooks/useTeachers'
+import { useToast } from '@/composables/useToast'
 
 export default {
   name: 'Teachers',
@@ -298,12 +172,13 @@ export default {
     TeacherTable,
     TeacherBulkActions,
     TeacherModal,
-    TeacherViewModal
+    TeacherViewModal,
+    ConfirmDialog
   },
   setup() {
-    // State
-    const loading = ref(false)
-    const teachers = ref([])
+    // State (use hook to fetch & map teacher data)
+    const toast = useToast()
+    const { teachers, fetchTeachers, deleteTeacher, updateTeacher, loading } = useTeachers()
     const selectedTeachers = ref([])
     
     // Modals
@@ -319,6 +194,8 @@ export default {
     const teacherToDelete = ref(null)
     const updateTeacherModalVisible = ref(false)
     const teacherToUpdate = ref(null)
+    const deleting = ref(false)
+    const updating = ref(false)
     
     // Pagination
     const currentPage = ref(1)
@@ -427,74 +304,12 @@ export default {
     
     // Methods
     const loadData = async () => {
-      loading.value = true
-      
       try {
-        // Mock data - replace with actual API call
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        teachers.value = [
-          {
-            id: 1,
-            code: 'GV001',
-            name: 'Nguyễn Văn An',
-            email: 'nva@university.edu.vn',
-            phone: '0123456789',
-            dateOfBirth: '1980-05-15',
-            gender: 'male',
-            department: 'cntt',
-            academicRank: 'ts',
-            position: 'Trưởng bộ môn',
-            status: 'active',
-            subjectCount: 3,
-            classCount: 2,
-            studentCount: 85,
-            teachingHours: 12,
-            createdAt: '2020-09-01',
-            notes: 'Chuyên gia về AI và Machine Learning'
-          },
-          {
-            id: 2,
-            code: 'GV002',
-            name: 'Trần Thị Bình',
-            email: 'ttb@university.edu.vn',
-            phone: '0987654321',
-            dateOfBirth: '1975-12-20',
-            gender: 'female',
-            department: 'cntt',
-            academicRank: 'pgs',
-            position: 'Phó khoa',
-            status: 'active',
-            subjectCount: 2,
-            classCount: 1,
-            studentCount: 45,
-            teachingHours: 8,
-            createdAt: '2018-03-15'
-          },
-          {
-            id: 3,
-            code: 'GV003',
-            name: 'Lê Quang Cường',
-            email: 'lqc@university.edu.vn',
-            phone: '0912345678',
-            dateOfBirth: '1985-07-10',
-            gender: 'male',
-            department: 'dtvt',
-            academicRank: 'ths',
-            position: '',
-            status: 'on-break',
-            subjectCount: 1,
-            classCount: 0,
-            studentCount: 0,
-            teachingHours: 0,
-            createdAt: '2021-08-01',
-            notes: 'Đang nghỉ thai sản'
-          }
-        ]
-      } catch (error) {
-        console.error('Error loading teachers:', error)
-      } finally {
-        loading.value = false
+        await fetchTeachers({ page: currentPage.value, limit: pageSize.value, q: filters.value.search || '' })
+      } catch (err) {
+        // show toast and keep UI empty (or fallback can be added)
+        console.error('loadData fetchTeachers error', err)
+        toast.error(err.message || 'Không thể tải danh sách giảng viên')
       }
     }
     
@@ -523,6 +338,9 @@ export default {
     
     // Teacher Management
     const openAddTeacherModal = () => {
+      // Debug: ensure add button click gets here
+      // eslint-disable-next-line no-console
+      console.log('[Teachers] openAddTeacherModal')
       editingTeacher.value = null
       isEditMode.value = false
       showTeacherModal.value = true
@@ -540,22 +358,31 @@ export default {
     }
     
     const viewTeacher = (teacher) => {
+      // debug log to ensure handler fires and data propagated
+      // eslint-disable-next-line no-console
+      console.log('[Teachers] viewTeacher handler', teacher)
       viewingTeacher.value = teacher
       showViewModal.value = true
     }
     
-    const deleteTeacher = (teacher) => {
+    const promptDeleteTeacher = (teacher) => {
       teacherToDelete.value = teacher
       deleteTeacherModalVisible.value = true
     }
     
-    const confirmDeleteTeacher = () => {
-      if (teacherToDelete.value) {
-        teachers.value = teachers.value.filter(t => t.id !== teacherToDelete.value.id)
-        selectedTeachers.value = selectedTeachers.value.filter(id => id !== teacherToDelete.value.id)
-        alert(`Đã xóa giảng viên ${teacherToDelete.value.name}`)
+    const confirmDeleteTeacher = async () => {
+      if (!teacherToDelete.value) return closeDeleteTeacherModal()
+      try {
+        deleting.value = true
+        const code = teacherToDelete.value.user_code || teacherToDelete.value.userId || teacherToDelete.value.code
+        await deleteTeacher(code)
+        closeDeleteTeacherModal()
+        await loadData()
+      } catch (e) {
+        console.error('delete teacher failed', e)
+      } finally {
+        deleting.value = false
       }
-      closeDeleteTeacherModal()
     }
     
     const closeDeleteTeacherModal = () => {
@@ -563,39 +390,58 @@ export default {
       teacherToDelete.value = null
     }
     
-    const suspendTeacher = (teacher) => {
+    const suspendTeacher = async (teacher) => {
+      // Optimistic UI change
       const index = teachers.value.findIndex(t => t.id === teacher.id)
-      if (index > -1) {
-        teachers.value[index].status = 'on-break'
+      if (index > -1) teachers.value[index].status = 'on-break'
+
+      // Persist on backend
+      try {
+        const userCode = teacher.user_code || teacher.code || teacher.userId || teacher.raw?.user_code
+        if (!userCode) throw new Error('Không tìm thấy mã người dùng')
+
+        // Backend expects nested user object with is_active: 0/1
+        await updateTeacher(userCode, { user: { is_active: 0 } })
+        toast.success('Giảng viên đã được tạm khóa')
+        await loadData()
+      } catch (err) {
+        console.error('suspendTeacher failed', err)
+        toast.error(err.message || 'Không thể tạm khóa giảng viên')
+        // rollback optimistic change
+        if (index > -1) teachers.value[index].status = 'active'
       }
     }
     
-    const activateTeacher = (teacher) => {
+    const activateTeacher = async (teacher) => {
+      // Optimistic UI change
       const index = teachers.value.findIndex(t => t.id === teacher.id)
-      if (index > -1) {
-        teachers.value[index].status = 'active'
+      if (index > -1) teachers.value[index].status = 'active'
+
+      // Persist on backend
+      try {
+        const userCode = teacher.user_code || teacher.code || teacher.userId || teacher.raw?.user_code
+        if (!userCode) throw new Error('Không tìm thấy mã người dùng')
+
+        await updateTeacher(userCode, { user: { is_active: 1 } })
+        toast.success('Giảng viên đã được kích hoạt')
+        await loadData()
+      } catch (err) {
+        console.error('activateTeacher failed', err)
+        toast.error(err.message || 'Không thể kích hoạt giảng viên')
+        // rollback optimistic change
+        if (index > -1) teachers.value[index].status = 'on-break'
       }
     }
     
-    const saveTeacher = (teacherData) => {
-      if (isEditMode.value) {
-        // Show update confirmation
-        teacherToUpdate.value = teacherData
-        updateTeacherModalVisible.value = true
-      } else {
-        // Add new teacher directly
-        const newTeacher = {
-          ...teacherData,
-          id: Date.now(),
-          subjectCount: 0,
-          classCount: 0,
-          studentCount: 0,
-          teachingHours: 0,
-          createdAt: new Date().toISOString().split('T')[0]
-        }
-        teachers.value.push(newTeacher)
+    // When the modal emits save, the modal already performed the create/update via API.
+    // So just reload the list to reflect DB state.
+    const saveTeacher = async (resOrData) => {
+      try {
+        await loadData()
+        // close modal if still open
         closeTeacherModal()
-        alert('Đã thêm giảng viên mới thành công!')
+      } catch (e) {
+        console.error('Error reloading teachers after save', e)
       }
     }
     
@@ -806,7 +652,7 @@ export default {
       editTeacher,
       editTeacherFromView,
       viewTeacher,
-      deleteTeacher,
+      promptDeleteTeacher,
       suspendTeacher,
       activateTeacher,
       saveTeacher,
@@ -942,7 +788,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100001;
   padding: 20px;
 }
 
@@ -1227,7 +1073,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100001;
   padding: 20px;
 }
 

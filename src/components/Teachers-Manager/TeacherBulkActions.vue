@@ -410,7 +410,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 100001;
   padding: 20px;
 }
 
