@@ -73,7 +73,7 @@
             
             <!-- Teacher -->
             <div class="form-group">
-              <label>Giáo viên phụ tr책</label>
+              <label>Giáo viên phụ trách</label>
               <select v-model="formData.teacherId">
                 <option value="">-- Chọn giáo viên --</option>
                 <option 
@@ -87,18 +87,54 @@
             </div>
             
             <!-- Room -->
-            <div class="form-group">
+            <div class="form-group full-width">
               <label>Phòng học</label>
-              <select v-model="formData.roomId">
-                <option value="">-- Chọn phòng học --</option>
-                <option 
-                  v-for="room in rooms" 
-                  :key="room.id" 
-                  :value="room.id"
-                >
-                  {{ room.name }} - {{ room.building }} ({{ room.capacity }} chỗ)
-                </option>
-              </select>
+              <div class="room-selection">
+                <!-- Base / Floor Selector -->
+                <div class="selector-row" v-if="bases && bases.length">
+                  <div class="selector-base">
+                    <label>Chọn cơ sở</label>
+                    <div class="selector-control">
+                      <select v-model="selectedBase">
+                        <option value="">-- Chọn cơ sở --</option>
+                        <option v-for="b in bases" :key="b.base_id" :value="b.base_code">
+                          {{ b.base_code }} - {{ b.base_name }}
+                        </option>
+                      </select>
+                      <button v-if="selectedBase" @click="clearBase" class="btn-clear" title="Xóa cơ sở">×</button>
+                    </div>
+                    <span v-if="basesLoading" class="loading-text">Đang tải cơ sở...</span>
+                  </div>
+
+                  <div class="selector-floor">
+                    <label>Chọn tầng</label>
+                    <div class="selector-control">
+                      <select v-model="selectedFloor" :disabled="!selectedBase || !(floorsByBase[selectedBase] && floorsByBase[selectedBase].length)">
+                        <option value="">-- Chọn tầng --</option>
+                        <option v-for="f in (floorsByBase[selectedBase] || [])" :key="f.floor_id" :value="f.floor_number">
+                          {{ f.floor_name || ('Lầu ' + f.floor_number) }}
+                        </option>
+                      </select>
+                      <button v-if="selectedFloor" @click="clearFloor" class="btn-clear" title="Xóa tầng">×</button>
+                    </div>
+                    <span v-if="selectedBase && !(floorsByBase[selectedBase] && floorsByBase[selectedBase].length)" class="loading-text">Không có tầng cho cơ sở này</span>
+                  </div>
+                </div>
+
+                <!-- Room Select -->
+                <div class="room-select" v-if="fetchedRooms.length">
+                  <select v-model="formData.roomId">
+                    <option value="">-- Chọn phòng học --</option>
+                    <option v-for="room in fetchedRooms" :key="room.room_id || room.id" :value="room.room_id || room.id">
+                      {{ roomLabel(room) }}
+                    </option>
+                  </select>
+                </div>
+
+                <div v-else-if="selectedBase && selectedFloor" class="no-rooms">
+                  Không có phòng nào cho tầng này.
+                </div>
+              </div>
             </div>
             
             <!-- Credits -->
@@ -136,15 +172,17 @@
             </div>
             
             <!-- Registration Open -->
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  v-model="formData.registrationOpen"
-                />
-                <span class="checkmark"></span>
-                Mở đăng ký cho sinh viên
-              </label>
+             <div class="form-group">
+              <label class="required">Trạng thái lớp học</label>
+              <select 
+                v-model="formData.classStatus" 
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="open">🟢 Mở đăng ký</option>
+                <option value="teaching">🔵 Đang dạy</option>
+                <option value="finished">🔴 Đã kết thúc</option>
+              </select>
             </div>
             
             <!-- Description -->
@@ -176,6 +214,7 @@
 
 <script>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRooms } from '@/hooks/useRooms'
 
 export default {
   name: 'SubjectModal',
@@ -217,7 +256,7 @@ export default {
       credits: 0,
       maxStudents: 40,
       status: 'active',
-      registrationOpen: false,
+      classStatus: 'open',
       description: '',
       schedule: '',
       department: ''
@@ -228,6 +267,13 @@ export default {
     const selectedDay = ref('')
     const selectedTimeSlots = ref([])
     const scheduleDays = ref([])
+
+    // Room selection variables
+    const selectedBase = ref('')
+    const selectedFloor = ref(null)
+    const fetchedRooms = ref([])
+
+    const { bases, basesLoading, fetchBases, fetchFloorsByBaseCode, fetchRoomsByBaseAndFloor, floorsByBase, roomsByFloor, parseRoomCode } = useRooms()
 
     // Time slot options
     const timeSlotOptions = ref([
@@ -246,6 +292,16 @@ export default {
       { value: '13', label: 'Tiết 13', time: '19:40-20:25' }
     ])
 
+    const roomLabel = (room) => {
+      if (!room) return ''
+      const code = room.room_code || room.roomCode || room.code || room.name || ''
+      const parsed = parseRoomCode(code)
+      const baseName = room.base_name || room.building || (parsed?.base_code ? `Cơ sở ${parsed.base_code}` : '')
+      const floorName = parsed && parsed.floor_number ? `Lầu ${parsed.floor_number}` : (room.floor_number ? `Lầu ${room.floor_number}` : '')
+      const roomName = room.room_name || room.room_code || room.name || code
+      return `${baseName}${floorName ? ' -> ' + floorName : ''}${roomName ? ' - Phòng ' + roomName : ''}`
+    }
+
     const isFormValid = computed(() => {
       return formData.value.frameworkSubjectId &&
              formData.value.code &&
@@ -257,6 +313,10 @@ export default {
     const initializeForm = () => {
       if (props.subject) {
         formData.value = { ...props.subject }
+        if (!formData.value.classStatus) {
+            // Nếu đang mở đăng ký -> open, ngược lại coi như đã kết thúc hoặc đang dạy tùy logic cũ của bạn
+            formData.value.classStatus = props.subject.registrationOpen ? 'open' : 'finished'
+        }
       } else {
         formData.value = {
           frameworkSubjectId: '',
@@ -268,7 +328,7 @@ export default {
           credits: 0,
           maxStudents: 40,
           status: 'active',
-          registrationOpen: false,
+          classStatus: 'open',
           description: '',
           schedule: '',
           department: ''
@@ -299,6 +359,19 @@ export default {
         formData.value.description = selectedSubject.description
         formData.value.department = selectedSubject.department
       }
+    }
+    
+    const clearBase = () => {
+      selectedBase.value = ''
+      selectedFloor.value = null
+      fetchedRooms.value = []
+      formData.value.roomId = ''
+    }
+
+    const clearFloor = () => {
+      selectedFloor.value = null
+      fetchedRooms.value = []
+      formData.value.roomId = ''
     }
     
     // Schedule handling functions
@@ -378,6 +451,30 @@ export default {
       }
     })
 
+    // Watch for room selection
+    watch(selectedBase, async (base) => {
+      if (base) {
+        selectedFloor.value = null
+        fetchedRooms.value = []
+        try {
+          await fetchFloorsByBaseCode(base)
+        } catch (e) {
+          console.debug('fetch floors failed', e)
+        }
+      }
+    })
+
+    watch(selectedFloor, async (fl) => {
+      if (!fl || !selectedBase.value) return
+      try {
+        const r = await fetchRoomsByBaseAndFloor(selectedBase.value, fl)
+        fetchedRooms.value = Array.isArray(r) ? r : (r.rooms || [])
+      } catch (e) {
+        console.debug('fetch rooms failed', e)
+        fetchedRooms.value = []
+      }
+    })
+
     const handleSubmit = () => {
       if (!isFormValid.value) return
       
@@ -412,8 +509,13 @@ export default {
       initializeForm()
     }, { immediate: true })
     
-    onMounted(() => {
+    onMounted(async () => {
       initializeForm()
+      try {
+        await fetchBases()
+      } catch (e) {
+        console.debug('fetch bases failed', e)
+      }
     })
     
     return {
@@ -424,6 +526,15 @@ export default {
       selectedTimeSlots,
       scheduleDays,
       timeSlotOptions,
+      selectedBase,
+      selectedFloor,
+      fetchedRooms,
+      bases,
+      basesLoading,
+      floorsByBase,
+      roomLabel,
+      clearBase,
+      clearFloor,
       handleFrameworkSubjectChange,
       handleSubmit,
       handleOverlayClick,
@@ -633,27 +744,75 @@ export default {
   cursor: not-allowed;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .modal-container {
-    margin: 10px;
-    max-width: none;
-  }
-  
-  .form-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  
-  .modal-header,
-  .modal-body,
-  .modal-footer {
-    padding: 16px;
-  }
-  
-  .modal-footer {
-    flex-direction: column;
-  }
+.room-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selector-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.selector-base label, .selector-floor label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.selector-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selector-control select {
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.btn-clear {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #6b7280;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.btn-clear:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.loading-text {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.room-select select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.no-rooms {
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #6b7280;
+  text-align: center;
 }
 
 /* Schedule Selection Styles */

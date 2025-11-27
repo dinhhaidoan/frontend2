@@ -12,10 +12,6 @@
             <p>Tổng môn học</p>
           </div>
         </div>
-        <div class="stat-trend positive">
-          <i class="fas fa-arrow-up"></i>
-          <span>+5 từ kỳ trước</span>
-        </div>
       </div>
 
       <!-- Môn bắt buộc -->
@@ -44,9 +40,6 @@
             <h3>{{ stats.electiveSubjects }}</h3>
             <p>Môn tự chọn</p>
           </div>
-        </div>
-        <div class="stat-detail">
-          {{ stats.electiveGroups }} nhóm tự chọn
         </div>
       </div>
 
@@ -78,9 +71,6 @@
             <p>Chuyên ngành</p>
           </div>
         </div>
-        <div class="stat-detail">
-          {{ stats.activeMajors }} đang hoạt động
-        </div>
       </div>
 
       <!-- Học kỳ -->
@@ -93,9 +83,6 @@
             <h3>{{ stats.semesters }}</h3>
             <p>Học kỳ</p>
           </div>
-        </div>
-        <div class="stat-detail">
-          8 kỳ tiêu chuẩn
         </div>
       </div>
     </div>

@@ -20,6 +20,11 @@
 
       <!-- Modal Body -->
       <div class="modal-body">
+        <div v-if="serverErrors.non_field_errors || serverErrors.error" class="server-error-box">
+          <ul>
+            <li v-for="(err, idx) in (serverErrors.non_field_errors || (serverErrors.error ? [serverErrors.error] : []))" :key="idx">{{ err }}</li>
+          </ul>
+        </div>
         <form @submit.prevent="handleSubmit">
           <!-- Thông tin cơ bản -->
           <div class="form-section">
@@ -33,51 +38,50 @@
                 <label>Mã môn học <span class="required">*</span></label>
                 <input
                   type="text"
-                  v-model="formData.code"
-                  placeholder="VD: IT101"
-                  :disabled="mode === 'view'"
+                  v-model="formData.sku"
+                  placeholder="VD: CS101"
+                  :disabled="mode === 'view' || mode === 'edit'"
                   required
                   class="form-input"
                 />
                 <small class="help-text">Mã môn học theo quy định của trường</small>
+                  <span v-if="serverErrors.sku || serverErrors.course_SKU" class="error-message">{{ (serverErrors.sku || serverErrors.course_SKU)[0] || (serverErrors.sku || serverErrors.course_SKU) }}</span>
               </div>
 
               <div class="form-group">
                 <label>Số tín chỉ <span class="required">*</span></label>
-                <select
-                  v-model="formData.credits"
+                <input
+                  type="number"
+                  v-model.number="formData.credits"
+                  min="1"
+                  max="10"
+                  placeholder="VD: 3"
                   :disabled="mode === 'view'"
                   required
-                  class="form-select"
-                >
-                  <option value="">Chọn số tín chỉ</option>
-                  <option value="1">1 tín chỉ</option>
-                  <option value="2">2 tín chỉ</option>
-                  <option value="3">3 tín chỉ</option>
-                  <option value="4">4 tín chỉ</option>
-                  <option value="5">5 tín chỉ</option>
-                  <option value="6">6 tín chỉ</option>
-                </select>
+                  class="form-input"
+                />
+                  <span v-if="serverErrors.credits" class="error-message">{{ serverErrors.credits[0] || serverErrors.credits }}</span>
               </div>
 
               <div class="form-group full-width">
                 <label>Tên môn học (Tiếng Việt) <span class="required">*</span></label>
                 <input
                   type="text"
-                  v-model="formData.name"
-                  placeholder="VD: Nhập môn Công nghệ thông tin"
+                  v-model="formData.nameVn"
+                  placeholder="VD: Nhập môn Khoa học Máy tính"
                   :disabled="mode === 'view'"
                   required
                   class="form-input"
                 />
+                <span v-if="serverErrors.nameVn || serverErrors.course_name_vn" class="error-message">{{ (serverErrors.nameVn || serverErrors.course_name_vn)[0] || (serverErrors.nameVn || serverErrors.course_name_vn) }}</span>
               </div>
 
               <div class="form-group full-width">
                 <label>Tên môn học (Tiếng Anh)</label>
                 <input
                   type="text"
-                  v-model="formData.englishName"
-                  placeholder="VD: Introduction to Information Technology"
+                  v-model="formData.nameEn"
+                  placeholder="VD: Introduction to Computer Science"
                   :disabled="mode === 'view'"
                   class="form-input"
                 />
@@ -96,51 +100,58 @@
               <div class="form-group">
                 <label>Loại môn học <span class="required">*</span></label>
                 <select
-                  v-model="formData.type"
+                  v-model="formData.courseType"
                   :disabled="mode === 'view'"
                   required
                   class="form-select"
                 >
                   <option value="">Chọn loại môn học</option>
-                  <option value="required">Môn bắt buộc</option>
-                  <option value="elective">Môn tự chọn</option>
-                  <option value="specialization">Môn chuyên ngành</option>
+                  <option value="required">Bắt buộc</option>
+                  <option value="elective">Tự chọn</option>
                 </select>
+                <span v-if="serverErrors.courseType || serverErrors.course_type" class="error-message">{{ (serverErrors.courseType || serverErrors.course_type)[0] || (serverErrors.courseType || serverErrors.course_type) }}</span>
               </div>
 
               <div class="form-group">
-                <label>Học kỳ đề xuất <span class="required">*</span></label>
+                <label>Học kỳ <span class="required">*</span></label>
                 <select
-                  v-model="formData.semester"
+                  v-model.number="formData.semesterId"
                   :disabled="mode === 'view'"
                   required
                   class="form-select"
                 >
                   <option value="">Chọn học kỳ</option>
-                  <option v-for="sem in 8" :key="sem" :value="sem">
-                    Học kỳ {{ sem }}
+                  <option 
+                    v-for="sem in semesterOptions" 
+                    :key="sem.id" 
+                    :value="sem.id"
+                  >
+                    {{ sem.name }}
                   </option>
                 </select>
+                <span v-if="serverErrors.semesterId || serverErrors.semester_id" class="error-message">{{ (serverErrors.semesterId || serverErrors.semester_id)[0] || (serverErrors.semesterId || serverErrors.semester_id) }}</span>
               </div>
 
               <div class="form-group full-width">
                 <label>Chuyên ngành áp dụng <span class="required">*</span></label>
-                <div class="checkbox-group">
+                <div class="majors-selection checkbox-group">
                   <label
                     v-for="major in majorOptions"
-                    :key="major.id"
+                    :key="major.major_id || major.id"
                     class="checkbox-item"
                   >
                     <input
                       type="checkbox"
-                      :value="major.id"
-                      v-model="formData.majors"
+                      :value="major.major_id || major.id"
+                      v-model="selectedMajors"
                       :disabled="mode === 'view'"
                       class="checkbox"
                     />
-                    <span class="checkbox-label">{{ major.name }}</span>
+                    <span class="checkbox-label">{{ major.major_name || major.name || major.major_code || major.code }}</span>
                   </label>
                 </div>
+                <span v-if="serverErrors.majorIds" class="error-message">{{ serverErrors.majorIds[0] }}</span>
+                <small class="help-text">Nhấn Ctrl để chọn nhiều chuyên ngành hoặc chọn từng ô</small>
               </div>
             </div>
           </div>
@@ -154,18 +165,24 @@
             
             <div class="prerequisites-section">
               <div class="prereq-input">
-                <input
-                  type="text"
+                <select
                   v-model="newPrerequisite"
-                  placeholder="Nhập mã môn tiên quyết (VD: IT101)"
                   :disabled="mode === 'view'"
-                  class="form-input"
-                  @keypress.enter="addPrerequisite"
-                />
+                  class="form-select"
+                >
+                  <option value="">Chọn môn tiên quyết</option>
+                  <option
+                    v-for="course in availableCourses"
+                    :key="course.id"
+                    :value="course.id"
+                  >
+                    {{ course.sku }} - {{ course.nameVn }}
+                  </option>
+                </select>
                 <button
                   type="button"
                   @click="addPrerequisite"
-                  :disabled="mode === 'view'"
+                  :disabled="mode === 'view' || !newPrerequisite"
                   class="btn-add-prereq"
                 >
                   <i class="fas fa-plus"></i>
@@ -173,13 +190,13 @@
                 </button>
               </div>
               
-              <div v-if="formData.prerequisites.length > 0" class="prereq-list">
+              <div v-if="selectedPrerequisites.length > 0" class="prereq-list">
                 <div
-                  v-for="(prereq, index) in formData.prerequisites"
+                  v-for="(prereq, index) in selectedPrerequisites"
                   :key="index"
                   class="prereq-item"
                 >
-                  <span class="prereq-code">{{ prereq }}</span>
+                  <span class="prereq-code">{{ getCourseDisplayName(prereq) }}</span>
                   <button
                     v-if="mode !== 'view'"
                     type="button"
@@ -192,6 +209,7 @@
               </div>
               
               <p v-else class="no-prereq">Không có điều kiện tiên quyết</p>
+              <span v-if="serverErrors.prerequisiteIds || serverErrors.prerequisite_ids" class="error-message">{{ (serverErrors.prerequisiteIds || serverErrors.prerequisite_ids)[0] || (serverErrors.prerequisiteIds || serverErrors.prerequisite_ids) }}</span>
             </div>
           </div>
 
@@ -211,6 +229,7 @@
                 :disabled="mode === 'view'"
                 class="form-textarea"
               ></textarea>
+              <span v-if="serverErrors.description" class="error-message">{{ serverErrors.description[0] || serverErrors.description }}</span>
             </div>
           </div>
         </form>
@@ -237,7 +256,7 @@
           <button
             v-if="mode !== 'view'"
             @click="handleSubmit"
-            :disabled="!isFormValid"
+            :disabled="!isFormValid || saving"
             class="btn-primary"
           >
             <i :class="submitIcon"></i>
@@ -259,7 +278,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
+import { useSemesters } from '@/hooks/useSemesters'
+import { useMajors } from '@/hooks/useMajors'
+import { useCourses } from '@/hooks/useCourses'
 
 const props = defineProps({
   isVisible: {
@@ -274,37 +296,44 @@ const props = defineProps({
   subject: {
     type: Object,
     default: null
+  },
+  serverErrors: {
+    type: Object,
+    default: () => ({})
+  },
+  saving: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['close', 'save', 'duplicate'])
 
-// Form data
-const formData = reactive({
-  code: '',
-  name: '',
-  englishName: '',
-  credits: '',
-  type: '',
-  semester: '',
-  majors: [],
-  prerequisites: [],
-  description: '',
-  content: '',
-  status: 'active'
+const { semesters, fetchSemesters } = useSemesters()
+const { majors, fetchMajors } = useMajors()
+const { courses: allCourses, fetchCourses } = useCourses()
+
+const semesterOptions = computed(() => semesters.value)
+const majorOptions = computed(() => majors.value)
+const availableCourses = computed(() => {
+  // Exclude current course from prerequisites
+  return allCourses.value.filter(c => !props.subject || c.id !== props.subject.id)
 })
 
-const newPrerequisite = ref('')
+// Form data
+const formData = reactive({
+  sku: '',
+  nameVn: '',
+  nameEn: '',
+  credits: 0,
+  courseType: '',
+  semesterId: null,
+  description: ''
+})
 
-// Options
-const majorOptions = ref([
-  { id: 'cntt', name: 'Công nghệ thông tin' },
-  { id: 'ktpm', name: 'Kỹ thuật phần mềm' },
-  { id: 'httt', name: 'Hệ thống thông tin' },
-  { id: 'mmt', name: 'Mạng máy tính' },
-  { id: 'ai', name: 'Trí tuệ nhân tạo' },
-  { id: 'ds', name: 'Khoa học dữ liệu' }
-])
+const selectedMajors = ref([])
+const selectedPrerequisites = ref([])
+const newPrerequisite = ref('')
 
 // Computed
 const modalTitle = computed(() => {
@@ -351,75 +380,95 @@ const submitIcon = computed(() => {
 })
 
 const isFormValid = computed(() => {
-  return formData.code &&
-         formData.name &&
-         formData.credits &&
-         formData.type &&
-         formData.semester &&
-         formData.majors.length > 0
+  return formData.sku &&
+         formData.nameVn &&
+         formData.credits > 0 &&
+         formData.courseType &&
+         formData.semesterId &&
+         selectedMajors.value.length > 0
 })
 
 // Methods
 const resetForm = () => {
   Object.assign(formData, {
-    code: '',
-    name: '',
-    englishName: '',
-    credits: '',
-    type: '',
-    semester: '',
-    majors: [],
-    prerequisites: [],
-    description: '',
-    content: '',
-    status: 'active'
+    sku: '',
+    nameVn: '',
+    nameEn: '',
+    credits: 0,
+    courseType: '',
+    semesterId: null,
+    description: ''
   })
+  selectedMajors.value = []
+  selectedPrerequisites.value = []
   newPrerequisite.value = ''
 }
 
 const loadSubjectData = () => {
   if (props.subject) {
     Object.assign(formData, {
-      code: props.subject.code || '',
-      name: props.subject.name || '',
-      englishName: props.subject.englishName || '',
-      credits: props.subject.credits || '',
-      type: props.subject.type || '',
-      semester: props.subject.semester || '',
-      majors: [...(props.subject.majors || [])],
-      prerequisites: [...(props.subject.prerequisites || [])],
-      description: props.subject.description || '',
-      content: props.subject.content || '',
-      status: props.subject.status || 'active'
+      sku: props.subject.sku || props.subject.code || props.subject.raw?.course_SKU || props.subject.raw?.sku || '',
+      nameVn: props.subject.nameVn || props.subject.name || props.subject.raw?.name_vn || props.subject.raw?.course_name_vn || '',
+      nameEn: props.subject.nameEn || props.subject.englishName || props.subject.raw?.name_en || props.subject.raw?.course_name_en || '',
+      credits: props.subject.credits || Number(props.subject.credit || props.subject.credits) || 0,
+      courseType: props.subject.courseType || props.subject.type || props.subject.raw?.course_type || '',
+      semesterId: props.subject.semesterId || props.subject.semester || (props.subject.Semester && (props.subject.Semester.id || props.subject.Semester.semester_id)) || null,
+      description: props.subject.description || props.subject.raw?.description || ''
     })
+    // Major handling: support both object arrays (Majors) and primitive arrays (majors)
+    if (props.subject.Majors && Array.isArray(props.subject.Majors)) {
+      selectedMajors.value = [...new Set(props.subject.Majors.map(m => Number(m.major_id || m.id)).filter(n => Number.isFinite(n)))]
+    } else if (props.subject.majors && Array.isArray(props.subject.majors)) {
+      // majors may be array of codes or ids
+      selectedMajors.value = [...new Set(props.subject.majors.map(m => Number.isFinite(Number(m)) ? Number(m) : m).filter(Boolean))]
+    } else {
+      selectedMajors.value = []
+    }
+
+    // Prerequisites handling: support both object arrays (Prerequisites) and primitive arrays (prerequisites)
+    if (props.subject.Prerequisites && Array.isArray(props.subject.Prerequisites)) {
+      selectedPrerequisites.value = props.subject.Prerequisites.map(p => Number(p?.course_id || p?.id || p)).filter(n => Number.isFinite(n))
+    } else if (props.subject.prerequisites && Array.isArray(props.subject.prerequisites)) {
+      selectedPrerequisites.value = props.subject.prerequisites.map(p => Number(p)).filter(n => Number.isFinite(n))
+    } else {
+      selectedPrerequisites.value = []
+    }
   }
 }
 
 const addPrerequisite = () => {
-  const code = newPrerequisite.value.trim().toUpperCase()
-  if (code && !formData.prerequisites.includes(code)) {
-    formData.prerequisites.push(code)
-    newPrerequisite.value = ''
+  if (!newPrerequisite.value) return
+  const id = Number(newPrerequisite.value)
+  if (!Number.isFinite(id)) return
+  if (!selectedPrerequisites.value.some(p => Number(p) === id)) {
+    selectedPrerequisites.value.push(id)
   }
+  newPrerequisite.value = ''
 }
 
 const removePrerequisite = (index) => {
-  formData.prerequisites.splice(index, 1)
+  selectedPrerequisites.value.splice(index, 1)
+}
+
+const getCourseDisplayName = (courseId) => {
+  if (courseId === null || courseId === undefined) return ''
+  const idStr = String(courseId)
+  const course = allCourses.value.find(c => String(c.id) === idStr || String(c.course_id) === idStr || String(c.sku) === idStr || String(c.course_SKU) === idStr || String(c.code) === idStr)
+  if (course) return `${course.sku || course.course_SKU || course.code} - ${course.nameVn || course.course_name_vn || course.name || ''}`
+  return `Môn học ${courseId}`
 }
 
 const handleSubmit = () => {
   if (!isFormValid.value) return
   
+  // Ensure numeric deduped IDs are sent
+  const dedupMajors = Array.from(new Set((selectedMajors.value || []).map(Number).filter(v => !Number.isNaN(v))))
+  const dedupPrereq = Array.from(new Set((selectedPrerequisites.value || []).map(Number).filter(v => !Number.isNaN(v))))
+
   const submitData = {
     ...formData,
-    credits: parseInt(formData.credits),
-    semester: parseInt(formData.semester)
-  }
-  
-  if (props.mode === 'add') {
-    submitData.id = Date.now() // Temporary ID for demo
-  } else if (props.subject?.id) {
-    submitData.id = props.subject.id
+    majorIds: dedupMajors,
+    prerequisiteIds: dedupPrereq
   }
   
   emit('save', submitData)
@@ -428,10 +477,12 @@ const handleSubmit = () => {
 const duplicateSubject = () => {
   const duplicateData = {
     ...formData,
-    code: formData.code + '_COPY',
-    name: formData.name + ' (Bản sao)',
-    id: Date.now()
+    sku: formData.sku + '_COPY',
+    nameVn: formData.nameVn + ' (Bản sao)',
+    majorIds: Array.from(new Set((selectedMajors.value || []).map(Number).filter(n => Number.isFinite(n)))),
+    prerequisiteIds: Array.from(new Set((selectedPrerequisites.value || []).map(Number).filter(n => Number.isFinite(n))))
   }
+  console.debug('SubjectModal.duplicateSubject payload:', duplicateData)
   emit('duplicate', duplicateData)
 }
 
@@ -451,14 +502,29 @@ const handleOverlayClick = () => {
   closeModal()
 }
 
+// Initialize data
+onMounted(async () => {
+  await Promise.allSettled([
+    fetchSemesters(),
+    fetchMajors(),
+    fetchCourses({ limit: 100 }) // Load all courses for prerequisites
+  ])
+})
+
 // Watchers
 watch(() => props.isVisible, (newVal) => {
   if (newVal) {
-    if (props.mode === 'add') {
-      resetForm()
-    } else {
-      loadSubjectData()
-    }
+    Promise.allSettled([
+      fetchSemesters(),
+      fetchMajors(),
+      fetchCourses({ limit: 100 })
+    ]).then(() => {
+      if (props.mode === 'add') {
+        resetForm()
+      } else {
+        loadSubjectData()
+      }
+    })
   }
 })
 
@@ -561,6 +627,15 @@ watch(() => props.subject, () => {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+}
+
+.server-error-box {
+  background: #fff6f6;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
 }
 
 .form-section {

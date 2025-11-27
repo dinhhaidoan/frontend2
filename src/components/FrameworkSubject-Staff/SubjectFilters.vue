@@ -8,7 +8,7 @@
           <input
             type="text"
             v-model="localFilters.search"
-            placeholder="Tìm mã môn, tên môn học, giảng viên..."
+            placeholder="Tìm mã môn, tên môn học..."
             class="search-input"
             @input="handleSearch"
           />
@@ -45,10 +45,10 @@
           <option value="">Tất cả chuyên ngành</option>
           <option
             v-for="major in majors"
-            :key="major.id"
-            :value="major.id"
+            :key="major.major_id || major.id || major.code"
+            :value="major.major_id || major.id || major.code"
           >
-            {{ major.name }}
+            {{ major.major_name || major.name || major.major_code || major.code }}
           </option>
         </select>
       </div>
@@ -59,11 +59,11 @@
         <select v-model="localFilters.semester" @change="handleFilterChange">
           <option value="">Tất cả học kỳ</option>
           <option
-            v-for="semester in semesters"
-            :key="semester"
-            :value="semester"
+            v-for="sem in semesters"
+            :key="sem.id || sem"
+            :value="sem.id || sem"
           >
-            Học kỳ {{ semester }}
+            {{ sem.name || `Học kỳ ${sem.id || sem}` }}
           </option>
         </select>
       </div>
@@ -118,7 +118,7 @@
           <button @click="localFilters.major = ''; handleFilterChange()">×</button>
         </span>
         <span v-if="localFilters.semester" class="filter-tag">
-          Học kỳ: {{ localFilters.semester }}
+          Học kỳ: {{ getSemesterName(localFilters.semester) }}
           <button @click="localFilters.semester = ''; handleFilterChange()">×</button>
         </span>
         <span v-if="localFilters.credits" class="filter-tag">
@@ -135,12 +135,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useMajors } from '@/hooks/useMajors'
+import { useSemesters } from '@/hooks/useSemesters'
 
 const props = defineProps({
   filters: {
     type: Object,
     default: () => ({})
+  },
+  subjects: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -156,49 +162,38 @@ const localFilters = reactive({
   status: props.filters.status || ''
 })
 
-// Quick filters
-const quickFilters = ref([
-  {
-    id: 'all',
-    label: 'Tất cả',
-    value: 'all',
-    icon: 'fas fa-th-large',
-    count: 156
-  },
-  {
-    id: 'required',
-    label: 'Bắt buộc',
-    value: 'required',
-    icon: 'fas fa-star',
-    count: 98
-  },
-  {
-    id: 'elective',
-    label: 'Tự chọn',
-    value: 'elective',
-    icon: 'fas fa-list-ul',
-    count: 58
-  },
-  {
-    id: 'new',
-    label: 'Mới cập nhật',
-    value: 'new',
-    icon: 'fas fa-plus-circle',
-    count: 12
-  }
-])
+// Quick filters (counts computed dynamically if subjects are provided)
+const quickFilters = computed(() => {
+  const arr = props.subjects || []
+  const total = arr.length
+  const required = arr.filter(s => (s.type || s.courseType || s.course_type) === 'required').length
+  const elective = arr.filter(s => (s.type || s.courseType || s.course_type) === 'elective').length
+  // Count items updated in last 30 days as "new" (fallback to createdAt or updatedAt)
+  const now = Date.now()
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+  const newCount = arr.filter(s => {
+    const d = s.updatedAt || s.createdAt || s.raw?.updatedAt || s.raw?.createdAt || s.raw?.updated_at || s.raw?.created_at
+    if (!d) return false
+    const time = Date.parse(d)
+    if (!time || Number.isNaN(time)) return false
+    return (now - time) <= THIRTY_DAYS
+  }).length
+  return [
+    { id: 'all', label: 'Tất cả', value: 'all', icon: 'fas fa-th-large', count: total },
+    { id: 'required', label: 'Bắt buộc', value: 'required', icon: 'fas fa-star', count: required },
+    { id: 'elective', label: 'Tự chọn', value: 'elective', icon: 'fas fa-list-ul', count: elective },
+  ]
+})
 
-// Data options
-const majors = ref([
-  { id: 'cntt', name: 'Công nghệ thông tin' },
-  { id: 'ktpm', name: 'Kỹ thuật phần mềm' },
-  { id: 'httt', name: 'Hệ thống thông tin' },
-  { id: 'mmt', name: 'Mạng máy tính' },
-  { id: 'ai', name: 'Trí tuệ nhân tạo' },
-  { id: 'ds', name: 'Khoa học dữ liệu' }
-])
+// Data options (live)
+const { majors: majorsList, fetchMajors } = useMajors()
+const { semesters: semestersList, fetchSemesters } = useSemesters()
+const majors = majorsList
+const semesters = computed(() => semestersList.value || [])
 
-const semesters = ref([1, 2, 3, 4, 5, 6, 7, 8])
+onMounted(async () => {
+  try { await Promise.all([fetchMajors(), fetchSemesters({ page: 1, limit: 100 })]) } catch (e) { /* ignore */ }
+})
 
 // Computed
 const hasActiveFilters = computed(() => {
@@ -247,8 +242,11 @@ const getTypeLabel = (type) => {
 }
 
 const getMajorName = (majorId) => {
-  const major = majors.value.find(m => m.id === majorId)
-  return major ? major.name : majorId
+  if (majorId === null || majorId === undefined) return ''
+  const key = String(majorId)
+  const arr = majors.value || []
+  const found = arr.find(m => String(m.major_id || m.id || m.code) === key || String(m.major_code || m.code || (m.major_name || m.name)).toLowerCase() === key.toLowerCase())
+  return found ? (found.major_name || found.name || found.major_code || found.code) : majorId
 }
 
 const getStatusLabel = (status) => {
@@ -258,6 +256,13 @@ const getStatusLabel = (status) => {
     'draft': 'Bản nháp'
   }
   return statusLabels[status] || status
+}
+
+const getSemesterName = (semId) => {
+  if (semId === null || semId === undefined || semId === '') return ''
+  const s = semesters.value.find(x => String(x.id) === String(semId) || (x.id === semId))
+  if (s) return s.name || `Học kỳ ${s.id}`
+  return `Học kỳ ${semId}`
 }
 </script>
 

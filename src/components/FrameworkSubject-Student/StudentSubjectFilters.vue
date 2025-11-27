@@ -159,7 +159,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useSemesters } from '@/hooks/useSemesters'
 
 const props = defineProps({
   filters: {
@@ -178,6 +179,12 @@ const activeQuickFilter = ref('')
 watch(() => props.filters, (newFilters) => {
   Object.assign(localFilters, newFilters)
 }, { deep: true })
+
+// Semesters from API
+const { semesters: semestersList, fetchSemesters } = useSemesters()
+const semesters = computed(() => semestersList.value || [])
+
+onMounted(async () => { try { await fetchSemesters({ page: 1, limit: 100 }) } catch (e) { /* ignore */ } })
 
 // Computed properties
 const activeFiltersCount = computed(() => {
@@ -231,7 +238,7 @@ const activeFiltersList = computed(() => {
     filters.push({
       key: 'semester',
       label: 'Học kỳ',
-      value: `Học kỳ ${localFilters.semester}`
+      value: (semesters.value.find(s => String(s.id) === String(localFilters.semester)) || {}).name || `Học kỳ ${localFilters.semester}`
     })
   }
   
@@ -679,4 +686,11 @@ const removeFilter = (filterKey) => {
     font-size: 13px;
   }
 }
-</style>
+        <select
+          v-model="localFilters.semester"
+          class="filter-select"
+          @change="handleFilterChange"
+        >
+          <option value="">Tất cả học kỳ</option>
+          <option v-for="sem in semesters" :key="sem.id || sem" :value="sem.id || sem">{{ sem.name || `Học kỳ ${sem.id}` }}</option>
+        </select>

@@ -1,6 +1,9 @@
 <template>
-  <div class="bulk-actions">
+  <div ref="bulkRef" class="bulk-actions" :class="{ dragging }" :style="containerStyle" @mousedown.stop="startDrag" @touchstart.stop.prevent="startTouch">
     <div class="bulk-info">
+      <div class="drag-handle" title="Kéo để di chuyển" @mousedown.stop.prevent="startDrag" @touchstart.stop.prevent="startTouch">
+        <i class="fas fa-arrows-alt"></i>
+      </div>
       <div class="selected-count">
         <i class="fas fa-check-circle"></i>
         Đã chọn {{ selectedCount }} môn học
@@ -51,16 +54,144 @@ export default {
     'bulk:assign-room',
     'bulk:toggle-registration',
     'clear-selection'
-  ]
+  ],
+  data() {
+    return {
+      pos: { x: 0, y: 0 },
+      dragging: false,
+      dragOffset: { x: 0, y: 0 },
+      savedKey: 'bulkActionsPosition'
+    }
+  },
+  computed: {
+    containerStyle() {
+      return {
+        left: this.pos.x + 'px',
+        top: this.pos.y + 'px',
+        right: 'auto',
+        bottom: 'auto'
+      }
+    }
+  },
+  mounted() {
+    this.initPosition()
+    window.addEventListener('resize', this.handleWindowResize)
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.handleWindowResize)
+    this.removeWindowDragListeners()
+  },
+  methods: {
+    initPosition() {
+      const stored = localStorage.getItem(this.savedKey)
+      const el = this.$refs.bulkRef
+      if (!el) return
+
+      // compute centered default if none
+      const width = el.offsetWidth || 360
+      const height = el.offsetHeight || 56
+      const defaultX = Math.max(8, Math.round((window.innerWidth - width) / 2))
+      const defaultY = Math.max(8, window.innerHeight - height - 20)
+      // on small screens, prefer pinned to bottom with left padding
+      const mobileDefault = (window.innerWidth <= 768)
+        ? { x: 10, y: Math.max(8, window.innerHeight - height - 20) }
+        : null
+
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          // clamp to viewport bounds
+          const clamped = this.clampToViewport(parsed.x, parsed.y, width, height)
+          this.pos = clamped
+        } catch (err) {
+          this.pos = { x: defaultX, y: defaultY }
+        }
+      } else {
+        this.pos = mobileDefault || { x: defaultX, y: defaultY }
+      }
+    },
+    clampToViewport(x, y, width, height) {
+      const minX = 8
+      const minY = 8
+      const maxX = Math.max(minX, window.innerWidth - width - 8)
+      const maxY = Math.max(minY, window.innerHeight - height - 8)
+      return {
+        x: Math.min(Math.max(minX, x), maxX),
+        y: Math.min(Math.max(minY, y), maxY)
+      }
+    },
+    startDrag(e) {
+      // don't start dragging if user clicked on a button or link
+      const ignoreEl = e.target.closest && e.target.closest('button, a, input, textarea, select, label')
+      if (ignoreEl) return
+      if (e.button !== undefined && e.button !== 0) return // only left click
+      const el = this.$refs.bulkRef
+      if (!el) return
+      this.dragging = true
+      this.dragOffset = { x: e.clientX - this.pos.x, y: e.clientY - this.pos.y }
+      document.body.style.userSelect = 'none'
+      window.addEventListener('mousemove', this.onDrag)
+      window.addEventListener('mouseup', this.endDrag)
+    },
+    startTouch(e) {
+      const touch = e.touches[0]
+      const el = this.$refs.bulkRef
+      if (!el || !touch) return
+      this.dragging = true
+      this.dragOffset = { x: touch.clientX - this.pos.x, y: touch.clientY - this.pos.y }
+      document.body.style.userSelect = 'none'
+      window.addEventListener('touchmove', this.onTouchDrag, { passive: false })
+      window.addEventListener('touchend', this.endDrag)
+    },
+    onDrag(e) {
+      if (!this.dragging) return
+      const el = this.$refs.bulkRef
+      if (!el) return
+      const newX = e.clientX - this.dragOffset.x
+      const newY = e.clientY - this.dragOffset.y
+      const clamped = this.clampToViewport(newX, newY, el.offsetWidth, el.offsetHeight)
+      this.pos = clamped
+    },
+    onTouchDrag(e) {
+      if (!this.dragging) return
+      e.preventDefault()
+      const touch = e.touches[0]
+      const el = this.$refs.bulkRef
+      if (!el || !touch) return
+      const newX = touch.clientX - this.dragOffset.x
+      const newY = touch.clientY - this.dragOffset.y
+      const clamped = this.clampToViewport(newX, newY, el.offsetWidth, el.offsetHeight)
+      this.pos = clamped
+    },
+    endDrag() {
+      if (!this.dragging) return
+      this.dragging = false
+      this.removeWindowDragListeners()
+      document.body.style.userSelect = ''
+      localStorage.setItem(this.savedKey, JSON.stringify(this.pos))
+    },
+    removeWindowDragListeners() {
+      window.removeEventListener('mousemove', this.onDrag)
+      window.removeEventListener('mouseup', this.endDrag)
+      window.removeEventListener('touchmove', this.onTouchDrag)
+      window.removeEventListener('touchend', this.endDrag)
+    },
+    handleWindowResize() {
+      const el = this.$refs.bulkRef
+      if (!el) return
+      const clamped = this.clampToViewport(this.pos.x, this.pos.y, el.offsetWidth, el.offsetHeight)
+      this.pos = clamped
+      localStorage.setItem(this.savedKey, JSON.stringify(this.pos))
+    }
+  }
 }
 </script>
 
 <style scoped>
 .bulk-actions {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* initial pos controlled by inline style */
+  background: white;
   background: white;
   border-radius: 12px;
   padding: 16px 20px;
@@ -71,16 +202,18 @@ export default {
   gap: 20px;
   z-index: 100;
   animation: slideUp 0.3s ease;
+  touch-action: none;
+  cursor: grab;
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(20px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 
@@ -88,6 +221,23 @@ export default {
   display: flex;
   align-items: center;
 }
+
+.drag-handle {
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #fbfaf8;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  cursor: grab;
+  user-select: none;
+}
+
+.drag-handle:active { cursor: grabbing }
 
 .selected-count {
   display: flex;
@@ -120,6 +270,12 @@ export default {
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+}
+
+.bulk-actions.dragging {
+  cursor: grabbing;
+  opacity: 0.95;
+  transform: none !important;
 }
 
 .bulk-btn:hover {

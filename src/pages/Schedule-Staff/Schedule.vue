@@ -209,6 +209,7 @@ import ExamModal from '@/components/Schedule-Staff/ExamModal.vue'
 import ScheduleDetailsModal from '@/components/Schedule-Staff/ScheduleDetailsModal.vue'
 import ConflictCheckerModal from '@/components/Schedule-Staff/ConflictCheckerModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useSemesters } from '@/hooks/useSemesters'
 
 export default {
   name: 'Schedule',
@@ -233,7 +234,7 @@ export default {
     const subjects = ref([])
     const teachers = ref([])
     const rooms = ref([])
-    const semesters = ref([])
+    const { semesters, fetchSemesters } = useSemesters()
     
     // Modals
     const showScheduleModal = ref(false)
@@ -513,10 +514,11 @@ export default {
     }
 
     const loadSemesters = async () => {
-      semesters.value = [
-        { id: 1, name: 'Học kỳ I - 2024-2025', status: 'active' },
-        { id: 2, name: 'Học kỳ II - 2024-2025', status: 'upcoming' }
-      ]
+      try {
+        await fetchSemesters()
+      } catch (err) {
+        console.error('Failed to load semesters in Schedule', err)
+      }
     }
 
     const checkConflicts = async () => {

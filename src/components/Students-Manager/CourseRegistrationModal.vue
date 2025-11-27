@@ -205,7 +205,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useSemesters } from '@/hooks/useSemesters'
 
 const props = defineProps({
   isOpen: Boolean,
@@ -217,16 +218,22 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save'])
 
-const selectedSemester = ref('1_2024')
+const selectedSemester = ref(null)
 const showAddCourseModal = ref(false)
 const newCourseId = ref('')
 
-const semesters = ref([
-  { id: '1_2024', name: 'HK1', year: '2024-2025' },
-  { id: '2_2024', name: 'HK2', year: '2024-2025' },
-  { id: '1_2023', name: 'HK1', year: '2023-2024' },
-  { id: '2_2023', name: 'HK2', year: '2023-2024' }
-])
+const { semesters, fetchSemesters } = useSemesters()
+
+onMounted(async () => {
+  try {
+    await fetchSemesters({ page: 1, limit: 100 })
+    if (!selectedSemester.value && semesters.value && semesters.value.length) {
+      selectedSemester.value = semesters.value[0].id
+    }
+  } catch (e) {
+    console.error('Failed to fetch semesters for CourseRegistrationModal', e)
+  }
+})
 
 const registeredCourses = ref([
   {

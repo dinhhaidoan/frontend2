@@ -10,7 +10,7 @@
 
     <!-- 1. Chọn học kỳ -->
     <SemesterSelector
-      :semesters="semesters"
+      :semesters="semestersList"
       :selectedSemester="selectedSemester"
       @select="handleSelectSemester"
     />
@@ -67,6 +67,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useSemesters } from '@/hooks/useSemesters'
 import SemesterSelector from '@/components/Register-Subject/SemesterSelector.vue';
 import SubjectSelector from '@/components/Register-Subject/SubjectSelector.vue';
 import ClassList from '@/components/Register-Subject/ClassList.vue';
@@ -75,7 +76,7 @@ import ConfirmModal from '@/components/Register-Subject/ConfirmModal.vue';
 import ClassDetailsModal from '@/components/Register-Subject/ClassDetailsModal.vue';
 
 // State
-const semesters = ref([]);
+const { semesters: semestersList, fetchSemesters } = useSemesters()
 const selectedSemester = ref(null);
 const availableSubjects = ref([]);
 const selectedSubject = ref(null);
@@ -277,35 +278,11 @@ const showNotification = (type, message) => {
 };
 
 // API calls (mock data for now)
-const loadSemesters = async () => {
-  // Simulate API call
-  semesters.value = [
-    {
-      id: 1,
-      name: 'Học kỳ 1',
-      academicYear: '2024-2025',
-      startDate: '2024-09-01',
-      endDate: '2025-01-15',
-      status: 'active'
-    },
-    {
-      id: 2,
-      name: 'Học kỳ 2',
-      academicYear: '2024-2025',
-      startDate: '2025-02-01',
-      endDate: '2025-06-30',
-      status: 'upcoming'
-    },
-    {
-      id: 3,
-      name: 'Học kỳ hè',
-      academicYear: '2024-2025',
-      startDate: '2025-07-01',
-      endDate: '2025-08-31',
-      status: 'upcoming'
-    }
-  ];
-};
+// Load semester list from API via useSemesters
+const setSemestersFromApi = () => {
+  // The hook returns mapped semester objects; we may map if child component expects a different shape.
+  // For now, we'll rely on semestersList directly in the template and keep this method for backward compatibility.
+}
 
 const loadSubjects = async (semesterId) => {
   // Simulate API call
@@ -444,8 +421,13 @@ const cancelRegistrationAPI = async (registrationId) => {
 };
 
 // Lifecycle
-onMounted(() => {
-  loadSemesters();
+onMounted(async () => {
+  try {
+    await fetchSemesters({ page: 1, limit: 100 })
+    setSemestersFromApi()
+  } catch (e) {
+    // fallback: still keep no semesters
+  }
 });
 </script>
 

@@ -33,45 +33,11 @@
       </div>
     </div>
 
-    <!-- Bulk Actions -->
-    <div v-if="selectedSubjects.length > 0" class="bulk-actions">
-      <div class="bulk-info">
-        <i class="fas fa-check-square"></i>
-        Đã chọn {{ selectedSubjects.length }} môn học
-      </div>
-      <div class="bulk-buttons">
-        <button @click="bulkAction('activate')" class="bulk-btn activate">
-          <i class="fas fa-check"></i>
-          Kích hoạt
-        </button>
-        <button @click="bulkAction('deactivate')" class="bulk-btn deactivate">
-          <i class="fas fa-pause"></i>
-          Tạm dừng
-        </button>
-        <button @click="bulkAction('export')" class="bulk-btn export">
-          <i class="fas fa-download"></i>
-          Xuất Excel
-        </button>
-        <button @click="bulkAction('delete')" class="bulk-btn delete">
-          <i class="fas fa-trash"></i>
-          Xóa
-        </button>
-      </div>
-    </div>
-
     <!-- Table -->
     <div class="table-container">
       <table class="subjects-table">
         <thead>
           <tr>
-            <th class="checkbox-col">
-              <input
-                type="checkbox"
-                :checked="isAllSelected"
-                @change="toggleSelectAll"
-                class="checkbox"
-              />
-            </th>
             <th class="sortable" @click="sort('code')">
               Mã môn
               <i :class="getSortIcon('code')"></i>
@@ -99,16 +65,7 @@
           <tr
             v-for="subject in paginatedSubjects"
             :key="subject.id"
-            :class="['subject-row', { selected: selectedSubjects.includes(subject.id) }]"
-          >
-            <td class="checkbox-col">
-              <input
-                type="checkbox"
-                :checked="selectedSubjects.includes(subject.id)"
-                @change="toggleSelect(subject.id)"
-                class="checkbox"
-              />
-            </td>
+            :class="['subject-row', { selected: selectedSubjects.includes(subject.id) }]">
             <td class="subject-code">
               <span class="code">{{ subject.code }}</span>
             </td>
@@ -148,7 +105,7 @@
                   :key="prereq"
                   class="prereq-tag"
                 >
-                  {{ prereq }}
+                  {{ getCourseName(subject, prereq) }}
                 </span>
               </div>
               <span v-else class="no-prereq">Không có</span>
@@ -174,13 +131,6 @@
                   title="Chỉnh sửa"
                 >
                   <i class="fas fa-edit"></i>
-                </button>
-                <button
-                  @click="$emit('duplicate-subject', subject)"
-                  class="action-btn duplicate"
-                  title="Nhân bản"
-                >
-                  <i class="fas fa-copy"></i>
                 </button>
                 <button
                   @click="$emit('delete-subject', subject)"
@@ -244,7 +194,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useCourses } from '@/hooks/useCourses'
+import { useMajors } from '@/hooks/useMajors'
 
 const props = defineProps({
   subjects: {
@@ -277,7 +229,7 @@ const itemsPerPage = ref(25)
 const sortField = ref('code')
 const sortDirection = ref('asc')
 
-// Mock data cho demo
+// Mock data cho demo (only used when VITE_USE_MOCK=true)
 const mockSubjects = ref([
   {
     id: 1,
@@ -342,7 +294,8 @@ const mockSubjects = ref([
 ])
 
 // Computed
-const allSubjects = computed(() => props.subjects.length ? props.subjects : mockSubjects.value)
+const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+const allSubjects = computed(() => props.subjects && props.subjects.length ? props.subjects : (useMock ? mockSubjects.value : []))
 
 const filteredSubjects = computed(() => {
   let filtered = [...allSubjects.value]
@@ -362,7 +315,7 @@ const filteredSubjects = computed(() => {
   }
   
   if (props.filters.major) {
-    filtered = filtered.filter(subject => subject.majors.includes(props.filters.major))
+    filtered = filtered.filter(subject => subjectHasMajor(subject, props.filters.major))
   }
   
   if (props.filters.semester) {
@@ -503,8 +456,23 @@ const getTypeLabel = (type) => {
   return labels[type] || type
 }
 
+const { majors: majorsList, fetchMajors } = useMajors()
+const { courses, fetchCourses } = useCourses()
+
 const getMajorName = (majorId) => {
-  const majors = {
+  // Use majorsList.value loaded at component mount
+  const majorsArr = majorsList && majorsList.value ? majorsList.value : []
+  if (majorId === null || majorId === undefined) return ''
+  const s = String(majorId)
+  // numeric id -> try to find by major_id
+  if (/^\d+$/.test(s)) {
+    const found = majorsArr.find(m => String(m.major_id || m.id) === s)
+    if (found) return found.major_name || found.name || found.major_code || found.code || s
+  }
+  const lower = s.toLowerCase()
+  const foundByCode = majorsArr.find(m => ((m.major_code || m.code) && String(m.major_code || m.code).toLowerCase() === lower) || ((m.major_name || m.name) && String(m.major_name || m.name).toLowerCase() === lower))
+  if (foundByCode) return foundByCode.major_name || foundByCode.name || foundByCode.major_code || foundByCode.code
+  const localMap = {
     'cntt': 'CNTT',
     'ktpm': 'KTPM',
     'httt': 'HTTT',
@@ -512,7 +480,50 @@ const getMajorName = (majorId) => {
     'ai': 'AI',
     'ds': 'DS'
   }
-  return majors[majorId] || majorId
+  return localMap[lower] || majorId
+}
+
+const subjectHasMajor = (subject, majorFilter) => {
+  if (!majorFilter && majorFilter !== 0) return false
+  const key = String(majorFilter)
+  // If subject has Majors object array
+  if (subject && Array.isArray(subject.Majors) && subject.Majors.length) {
+    return subject.Majors.some(m => {
+      const keys = [m.major_id || m.id, m.major_code || m.code, m.major_name || m.name]
+        .filter(Boolean).map(k => String(k).toLowerCase())
+      return keys.includes(key.toLowerCase()) || String(m.major_id || m.id) === key
+    })
+  }
+  // If subject has primitive majors array (codes or ids)
+  if (subject && Array.isArray(subject.majors) && subject.majors.length) {
+    return subject.majors.some(m => String(m).toLowerCase() === key.toLowerCase() || String(m) === key)
+  }
+  return false
+}
+
+onMounted(async () => {
+  try {
+    await fetchMajors()
+    // Try to preload courses for prerequisites lookup
+    try { await fetchCourses({ page: 1, limit: 100 }) } catch(e) { /* ignore */ }
+  } catch (e) {
+    // Ignore
+  }
+})
+
+const getCourseName = (subject, courseRef) => {
+  if (!courseRef && courseRef !== 0) return ''
+  const s = String(courseRef)
+  // Prefer object mapping on subject (Prerereqs array of objects)
+  if (subject && subject.Prerequisites && Array.isArray(subject.Prerequisites) && subject.Prerequisites.length) {
+    // Support both object entries and primitive id entries in subject.Prerequisites
+    const f = subject.Prerequisites.find(p => String(p?.id || p?.course_id || p?.sku || p?.code || p) === s)
+    if (f) return (f.sku || f.course_SKU || f.code || String(f.id)) + ' - ' + (f.course_name_vn || f.name_vn || f.name || f.nameVn || '')
+  }
+  // fall back to global courses
+  const found = (courses && courses.value ? courses.value : []).map(c => c.raw || c).find(c => String(c.id || c.course_id || c.sku || c.course_SKU || c.code) === s)
+  if (found) return (found.sku || found.course_SKU || found.code || String(found.id)) + ' - ' + (found.course_name_vn || found.name_vn || found.name || found.nameVn || '')
+  return s
 }
 
 const getStatusIcon = (status) => {

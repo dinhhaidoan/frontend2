@@ -35,15 +35,13 @@
       </div>
     </div>
 
-    <!-- Statistics Cards -->
-    <SubjectStats :stats="statistics" />
-
     <!-- Filters -->
     <SubjectFilters 
       :filters="filters"
       :semesters="semesters"
       :teachers="teachers"
       :rooms="rooms"
+      :subjects="frameworkSubjects.length ? frameworkSubjects : subjects"
       @update:filters="updateFilters"
       @reset-filters="resetFilters"
     />
@@ -60,6 +58,7 @@
       @duplicate:subject="duplicateSubject"
       @toggle:registration="toggleSubjectRegistration"
       @view:students="viewSubjectStudents"
+      @assign:teacher="assignTeacherForSubject"
     />
 
     <!-- Bulk Actions -->
@@ -138,13 +137,15 @@
 
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
-import SubjectStats from '@/components/Subjects-Staff/SubjectStats.vue'
+import { useToast } from '@/composables/useToast'
 import SubjectFilters from '@/components/Subjects-Staff/SubjectFilters.vue'
 import SubjectTable from '@/components/Subjects-Staff/SubjectTable.vue'
 import BulkActions from '@/components/Subjects-Staff/BulkActions.vue'
 import SubjectModal from '@/components/Subjects-Staff/SubjectModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import SubjectViewModal from '@/components/Subjects-Staff/SubjectViewModal.vue'
+import { useSemesters } from '@/hooks/useSemesters'
+import { useMajors } from '@/hooks/useMajors'
 import TeacherAssignModal from '@/components/Subjects-Staff/TeacherAssignModal.vue'
 import RoomAssignModal from '@/components/Subjects-Staff/RoomAssignModal.vue'
 import RegistrationModal from '@/components/Subjects-Staff/RegistrationModal.vue'
@@ -153,7 +154,6 @@ import SubjectStudentsModal from '@/components/Subjects-Staff/SubjectStudentsMod
 export default {
   name: 'Subjects',
   components: {
-    SubjectStats,
     SubjectFilters,
     SubjectTable,
     BulkActions,
@@ -170,7 +170,8 @@ export default {
     const loading = ref(false)
     const subjects = ref([])
     const frameworkSubjects = ref([])
-    const semesters = ref([])
+    const { semesters, fetchSemesters } = useSemesters()
+    const { majors: majorsList, fetchMajors } = useMajors()
     const teachers = ref([])
     const rooms = ref([])
     const selectedSubjects = ref([])
@@ -192,6 +193,7 @@ export default {
     // Filters
     const filters = ref({
       search: '',
+      type: 'all',
       semester: '',
       teacher: '',
       room: '',
@@ -202,14 +204,32 @@ export default {
     })
 
     // Computed
-    const statistics = computed(() => ({
-      total: subjects.value.length,
-      active: subjects.value.filter(s => s.status === 'active').length,
-      withTeacher: subjects.value.filter(s => s.teacherId).length,
-      withRoom: subjects.value.filter(s => s.roomId).length,
-      registrationOpen: subjects.value.filter(s => s.registrationOpen).length,
-      registered: subjects.value.reduce((sum, s) => sum + (s.registeredCount || 0), 0)
-    }))
+    const statistics = computed(() => {
+      // prefer using frameworkSubjects as program-level subjects (unique subjects) if available
+      const source = (frameworkSubjects.value && frameworkSubjects.value.length) ? frameworkSubjects.value : subjects.value
+      const totalSubjects = source.length
+      const requiredSubjects = source.filter(s => (s.type || s.courseType || s.course_type || 'required') === 'required').length
+      const electiveSubjects = source.filter(s => (s.type || s.courseType || s.course_type) === 'elective').length
+      const totalCredits = source.reduce((sum, s) => sum + (s.credits || 0), 0)
+      const requiredCredits = source.filter(s => (s.type || s.courseType || s.course_type) === 'required').reduce((sum, s) => sum + (s.credits || 0), 0)
+      const electiveCredits = totalCredits - requiredCredits
+      const majorsCount = majorsList.value ? majorsList.value.length : 0
+      const activeMajors = majorsList.value ? majorsList.value.filter(m => (m.status === 'active' || m.active === true)).length : 0
+      const semestersCount = semesters.value ? semesters.value.length : 0
+
+      return {
+        totalSubjects,
+        requiredSubjects,
+        electiveSubjects,
+        electiveGroups: 12,
+        totalCredits,
+        requiredCredits,
+        electiveCredits,
+        majors: majorsCount,
+        activeMajors,
+        semesters: semestersCount
+      }
+    })
 
     const filteredSubjects = computed(() => {
       let result = subjects.value
@@ -226,6 +246,22 @@ export default {
       if (filters.value.semester) {
         result = result.filter(subject => subject.semesterId === filters.value.semester)
       }
+    if (filters.value.type && filters.value.type !== 'all') {
+      if (filters.value.type === 'new') {
+        const now = Date.now()
+        const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+        result = result.filter(subject => {
+          const d = subject.updatedAt || subject.createdAt || subject.raw?.updatedAt || subject.raw?.createdAt || subject.raw?.updated_at || subject.raw?.created_at
+          if (!d) return false
+          const time = Date.parse(d)
+          if (!time || Number.isNaN(time)) return false
+          return (now - time) <= THIRTY_DAYS
+        })
+      } else {
+        result = result.filter(subject => subject.type === filters.value.type)
+      }
+    }
+
 
       if (filters.value.teacher) {
         result = result.filter(subject => subject.teacherId === filters.value.teacher)
@@ -267,17 +303,20 @@ export default {
     })
 
     // Methods
+    const toast = useToast()
+
     const loadData = async () => {
       loading.value = true
       try {
         await Promise.all([
-          loadSubjects(),
-          loadFrameworkSubjects(),
-          loadSemesters(),
-          loadTeachers(),
-          loadRooms(),
-          loadRegistrationConfig()
-        ])
+            loadSubjects(),
+            loadFrameworkSubjects(),
+            loadSemesters(),
+            loadTeachers(),
+            loadRooms(),
+            loadRegistrationConfig(),
+            fetchMajors()
+          ])
       } catch (error) {
         console.error('Lỗi khi tải dữ liệu:', error)
       } finally {
@@ -354,23 +393,11 @@ export default {
     }
 
     const loadSemesters = async () => {
-      // Mock data
-      semesters.value = [
-        {
-          id: 1,
-          name: 'Học kỳ I - 2024-2025',
-          startDate: '2024-09-01',
-          endDate: '2024-12-31',
-          status: 'active'
-        },
-        {
-          id: 2,
-          name: 'Học kỳ II - 2024-2025',
-          startDate: '2025-01-15',
-          endDate: '2025-05-31',
-          status: 'upcoming'
-        }
-      ]
+      try {
+        await fetchSemesters()
+      } catch (err) {
+        console.error('Failed to load semesters in Subjects page', err)
+      }
     }
 
     const loadTeachers = async () => {
@@ -469,11 +496,12 @@ export default {
     }
 
     const deleteSubject = (subject) => {
-      if (confirm(`Bạn có chắc chắn muốn xóa môn học "${subject.name}"?`)) {
-        const index = subjects.value.findIndex(s => s.id === subject.id)
-        if (index > -1) {
-          subjects.value.splice(index, 1)
-        }
+      confirmDialog.value = {
+        show: true,
+        type: 'danger',
+        title: 'Xác nhận xóa môn học',
+        message: `Bạn có chắc chắn muốn xóa môn học "${subject.name}"?`,
+        payload: { action: 'deleteSubject', data: subject }
       }
     }
 
@@ -526,14 +554,21 @@ export default {
 
     // Bulk actions
     const bulkDeleteSubjects = () => {
-      if (confirm(`Bạn có chắc chắn muốn xóa ${selectedSubjects.value.length} môn học đã chọn?`)) {
-        const selectedIds = selectedSubjects.value.map(s => s.id)
-        subjects.value = subjects.value.filter(s => !selectedIds.includes(s.id))
-        clearSelection()
+      confirmDialog.value = {
+        show: true,
+        type: 'danger',
+        title: 'Xác nhận xóa nhiều môn học',
+        message: `Bạn có chắc chắn muốn xóa ${selectedSubjects.value.length} môn học đã chọn?`,
+        payload: { action: 'bulkDeleteSubjects', data: [...selectedSubjects.value] }
       }
     }
 
     const bulkAssignTeacher = () => {
+      showTeacherModal.value = true
+    }
+
+    const assignTeacherForSubject = (subject) => {
+      selectedSubjects.value = [subject]
       showTeacherModal.value = true
     }
 
@@ -593,6 +628,7 @@ export default {
         const idx = subjects.value.findIndex(s => s.id === editingSubject.value.id)
         if (idx > -1) subjects.value[idx] = { ...subjectData }
         closeSubjectModal()
+        toast.success('Cập nhật môn học thành công', `Lưu thay đổi cho môn học "${subjectData.name || subjectData.code}"`)
       }
       if (p.action === 'assignTeacher') {
         const teacherData = p.data
@@ -604,6 +640,7 @@ export default {
           }
         })
         closeTeacherModal()
+        toast.success('Gán giáo viên thành công', `Giáo viên "${teacherData.teacherName || '---'}" đã được gán`)        
         clearSelection()
       }
       if (p.action === 'assignRoom') {
@@ -616,6 +653,22 @@ export default {
           }
         })
         closeRoomModal()
+        toast.success('Gán phòng thành công', `Phòng "${roomData.roomName || '---'}" đã được gán`)
+        clearSelection()
+      }
+      if (p.action === 'deleteSubject') {
+        const subjectData = p.data
+        const idx = subjects.value.findIndex(s => s.id === subjectData.id)
+        if (idx > -1) {
+          subjects.value.splice(idx, 1)
+          toast.success(`Xóa môn học thành công`, `Môn học "${subjectData.name || subjectData.code}" đã được xóa`)
+        }
+      }
+      if (p.action === 'bulkDeleteSubjects') {
+        const items = p.data || []
+        const idsToDelete = items.map(i => i.id)
+        subjects.value = subjects.value.filter(s => !idsToDelete.includes(s.id))
+        toast.success(`Xóa ${items.length} môn học thành công`, `${items.length} môn học đã được xóa`)
         clearSelection()
       }
       confirmDialog.value.show = false
@@ -718,6 +771,7 @@ export default {
       clearSelection,
       bulkDeleteSubjects,
       bulkAssignTeacher,
+      assignTeacherForSubject,
       bulkAssignRoom,
       bulkToggleRegistration,
       closeTeacherModal,

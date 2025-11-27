@@ -40,6 +40,7 @@
     <!-- Filters -->
     <SubjectFilters 
       :filters="filters"
+      :subjects="subjects"
       @update:filters="updateFilters"
     />
 
@@ -81,6 +82,7 @@
         v-if="viewMode === 'table'"
         :subjects="subjects"
         :filters="filters"
+        :loading="loading"
         :view-mode="viewMode"
         @add-subject="openAddModal"
         @view-subject="viewSubject"
@@ -185,6 +187,7 @@
       :is-visible="modalVisible"
       :mode="modalMode"
       :subject="selectedSubject"
+      :serverErrors="modalServerErrors"
       @close="closeModal"
       @save="saveSubject"
       @duplicate="handleDuplicate"
@@ -227,6 +230,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useMajors } from '@/hooks/useMajors'
+import { useSemesters } from '@/hooks/useSemesters'
 import SubjectStats from '../../components/FrameworkSubject-Staff/SubjectStats.vue'
 import SubjectFilters from '../../components/FrameworkSubject-Staff/SubjectFilters.vue'
 import SubjectTable from '../../components/FrameworkSubject-Staff/SubjectTable.vue'
@@ -237,6 +242,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 // State
 const viewMode = ref('table')
 const modalVisible = ref(false)
+const modalServerErrors = ref({})
 const modalMode = ref('add')
 const selectedSubject = ref(null)
 const deleteModalVisible = ref(false)
@@ -262,83 +268,47 @@ const filters = reactive({
   status: ''
 })
 
-// Mock data
-const subjects = ref([
-  {
-    id: 1,
-    code: 'IT101',
-    name: 'Nhập môn Công nghệ thông tin',
-    englishName: 'Introduction to Information Technology',
-    credits: 3,
-    type: 'required',
-    majors: ['cntt', 'ktpm'],
-    semester: 1,
-    prerequisites: [],
-    status: 'active',
-    description: 'Môn học giới thiệu tổng quan về lĩnh vực CNTT',
-    content: 'Các khái niệm cơ bản, lịch sử phát triển, ứng dụng của CNTT...'
-  },
-  {
-    id: 2,
-    code: 'IT102',
-    name: 'Toán rời rạc',
-    englishName: 'Discrete Mathematics',
-    credits: 3,
-    type: 'required',
-    majors: ['cntt', 'ktpm', 'httt'],
-    semester: 1,
-    prerequisites: [],
-    status: 'active',
-    description: 'Nền tảng toán học cho khoa học máy tính',
-    content: 'Logic, tập hợp, quan hệ, đồ thị, tổ hợp...'
-  },
-  {
-    id: 3,
-    code: 'IT201',
-    name: 'Cấu trúc dữ liệu và Giải thuật',
-    englishName: 'Data Structures and Algorithms',
-    credits: 4,
-    type: 'required',
-    majors: ['cntt', 'ktpm'],
-    semester: 2,
-    prerequisites: ['IT101'],
-    status: 'active',
-    description: 'Các cấu trúc dữ liệu và giải thuật cơ bản',
-    content: 'Mảng, danh sách, ngăn xếp, hàng đợi, cây, đồ thị...'
-  },
-  {
-    id: 4,
-    code: 'IT301',
-    name: 'Trí tuệ nhân tạo',
-    englishName: 'Artificial Intelligence',
-    credits: 3,
-    type: 'elective',
-    majors: ['ai'],
-    semester: 5,
-    prerequisites: ['IT201', 'IT202'],
-    status: 'active',
-    description: 'Các khái niệm và kỹ thuật cơ bản trong AI',
-    content: 'Tìm kiếm, logic, học máy, mạng neural...'
-  },
-  {
-    id: 5,
-    code: 'IT401',
-    name: 'Thực tập doanh nghiệp',
-    englishName: 'Industry Internship',
-    credits: 2,
-    type: 'required',
-    majors: ['cntt', 'ktpm', 'httt'],
-    semester: 8,
-    prerequisites: ['IT301', 'IT302'],
-    status: 'draft',
-    description: 'Thực tập tại doanh nghiệp',
-    content: 'Áp dụng kiến thức đã học vào thực tế...'
-  }
-])
+// Subjects come from API-managed courses
+import { useCourses } from '@/hooks/useCourses'
+const { courses, fetchCourses, createCourse, updateCourse, deleteCourse, loading, total, page, limit, lastPage } = useCourses()
+const { majors: majorsList, fetchMajors } = useMajors()
+const { semesters: semestersList, fetchSemesters } = useSemesters()
+
+// Convert API course objects (mapCourse output) to UI-friendly subject structure
+const subjects = computed(() => (courses.value || []).map(c => ({
+  id: c.id,
+  sku: c.sku || c.raw?.course_SKU || c.raw?.sku || '',
+  code: c.sku || c.raw?.course_SKU || c.raw?.sku || '',
+  name: c.nameVn || c.name || c.raw?.name_vn || c.raw?.course_name_vn || '',
+  nameVn: c.nameVn || c.name || c.raw?.name_vn || c.raw?.course_name_vn || '',
+  englishName: c.nameEn || c.raw?.name_en || c.raw?.course_name_en || '',
+  credits: c.credits || 0,
+  type: c.courseType || c.raw?.course_type || 'required',
+  // For display, prefer the short code (major_code or code), otherwise the name
+  majors: Array.isArray(c.Majors) ? c.Majors.map(m => {
+    // m can be either an object like { major_id:..., major_code:... } or a primitive id/code string/number
+    if (m && typeof m === 'object') {
+      return (m.major_code || m.code || m.major_name || m.name || String(m.major_id || m.id || '')).toString()
+    }
+    return String(m)
+  }).filter(Boolean) : [],
+  Majors: Array.isArray(c.Majors) ? c.Majors : [],
+  semester: c.semesterId || (c.Semester && (c.Semester.id || c.Semester.semester_id)) || null,
+  Semester: c.Semester || null,
+  prerequisites: Array.isArray(c.Prerequisites) ? c.Prerequisites.map(p => {
+    // p can be an object with properties or a plain id/sku/code
+    if (p && typeof p === 'object') return p.id || p.course_id || p.sku || p.code || null
+    return p
+  }).filter(Boolean) : [],
+  Prerequisites: Array.isArray(c.Prerequisites) ? c.Prerequisites : [],
+  status: c.raw?.status || 'active',
+  description: c.description || c.raw?.description || '',
+  content: ''
+})))
 
 // Computed
 const statistics = computed(() => {
-  const total = subjects.value.length
+  const totalLocalCount = subjects.value.length
   const required = subjects.value.filter(s => s.type === 'required').length
   const elective = subjects.value.filter(s => s.type === 'elective').length
   const totalCredits = subjects.value.reduce((sum, s) => sum + s.credits, 0)
@@ -346,18 +316,38 @@ const statistics = computed(() => {
   const electiveCredits = totalCredits - requiredCredits
   
   return {
-    totalSubjects: total,
+    // Use API total when available, fall back to local computed length
+    totalSubjects: (total && total.value) || totalLocalCount,
     requiredSubjects: required,
     electiveSubjects: elective,
     electiveGroups: 12,
     totalCredits,
     requiredCredits,
     electiveCredits,
-    majors: 6,
-    activeMajors: 5,
-    semesters: 8
+    majors: majorsList.value ? majorsList.value.length : 0,
+    activeMajors: majorsList.value ? majorsList.value.filter(m => (m.status === 'active' || m.active === true)).length : (majorsList.value ? majorsList.value.length : 0),
+    semesters: semestersList.value ? semestersList.value.length : 0,
+    page: page && page.value,
+    limit: limit && limit.value,
+    lastPage: lastPage && lastPage.value
   }
 })
+
+const subjectHasMajor = (subject, majorFilter) => {
+  if (!majorFilter && majorFilter !== 0) return false
+  const key = String(majorFilter).toLowerCase()
+  if (!subject) return false
+  if (Array.isArray(subject.Majors) && subject.Majors.length) {
+    return subject.Majors.some(m => {
+      const vals = [m.major_id || m.id, m.major_code || m.code, m.major_name || m.name].filter(Boolean).map(v => String(v).toLowerCase())
+      return vals.includes(key) || String(m.major_id || m.id) === key
+    })
+  }
+  if (Array.isArray(subject.majors) && subject.majors.length) {
+    return subject.majors.some(m => String(m).toLowerCase() === key || String(m) === key)
+  }
+  return false
+}
 
 const filteredSubjects = computed(() => {
   let filtered = [...subjects.value]
@@ -373,11 +363,23 @@ const filteredSubjects = computed(() => {
   }
   
   if (filters.type && filters.type !== 'all') {
-    filtered = filtered.filter(subject => subject.type === filters.type)
+    if (filters.type === 'new') {
+      const now = Date.now()
+      const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+      filtered = filtered.filter(subject => {
+        const d = subject.updatedAt || subject.createdAt || subject.raw?.updatedAt || subject.raw?.createdAt || subject.raw?.updated_at || subject.raw?.created_at
+        if (!d) return false
+        const time = Date.parse(d)
+        if (!time || Number.isNaN(time)) return false
+        return (now - time) <= THIRTY_DAYS
+      })
+    } else {
+      filtered = filtered.filter(subject => subject.type === filters.type)
+    }
   }
   
   if (filters.major) {
-    filtered = filtered.filter(subject => subject.majors.includes(filters.major))
+    filtered = filtered.filter(subject => subjectHasMajor(subject, filters.major))
   }
   
   if (filters.semester) {
@@ -413,31 +415,43 @@ const setViewMode = (mode) => {
 const openAddModal = () => {
   modalMode.value = 'add'
   selectedSubject.value = null
+  modalServerErrors.value = {}
   modalVisible.value = true
 }
 
 const viewSubject = (subject) => {
   modalMode.value = 'view'
   selectedSubject.value = subject
+  modalServerErrors.value = {}
   modalVisible.value = true
 }
 
 const editSubject = (subject) => {
   modalMode.value = 'edit'
   selectedSubject.value = subject
+  modalServerErrors.value = {}
   modalVisible.value = true
 }
 
-const duplicateSubject = (subject) => {
-  const duplicate = {
-    ...subject,
-    id: Date.now(),
-    code: subject.code + '_COPY',
-    name: subject.name + ' (Bản sao)',
-    status: 'draft'
+const duplicateSubject = async (subject) => {
+  const duplicatePayload = {
+    sku: (subject.code || subject.sku) + '_COPY',
+    nameVn: (subject.name || subject.nameVn) + ' (Bản sao)',
+    nameEn: subject.englishName || subject.nameEn,
+    credits: subject.credits,
+    courseType: subject.type,
+    semesterId: subject.semester,
+    description: subject.description,
+    majorIds: (subject.Majors ? subject.Majors.map(m => Number(m.major_id || m.id)) : (subject.majors || []).map(v => Number(v))).filter(n => Number.isFinite(n)),
+    prerequisiteIds: (subject.Prerequisites ? subject.Prerequisites.map(p => Number(p.course_id || p.id)) : (subject.prerequisites || []).map(v => Number(v))).filter(n => Number.isFinite(n))
   }
-  subjects.value.push(duplicate)
-  showNotification('Đã nhân bản môn học thành công', 'success')
+  try {
+    await createCourse(duplicatePayload)
+    showNotification('Đã nhân bản môn học thành công', 'success')
+  } catch (err) {
+    console.error('Duplicate course failed', err)
+    showNotification('Nhân bản môn học thất bại', 'error')
+  }
 }
 
 const deleteSubject = (subject) => {
@@ -445,13 +459,14 @@ const deleteSubject = (subject) => {
   deleteModalVisible.value = true
 }
 
-const confirmDelete = () => {
+const confirmDelete = async () => {
   if (!subjectToDelete.value) return
-  
-  const index = subjects.value.findIndex(s => s.id === subjectToDelete.value.id)
-  if (index > -1) {
-    subjects.value.splice(index, 1)
+  try {
+    await deleteCourse(subjectToDelete.value.id)
     showNotification(`Đã xóa môn học "${subjectToDelete.value.name}" thành công`, 'success')
+  } catch (err) {
+    console.error('Delete course failed', err)
+    showNotification('Xóa môn học thất bại', 'error')
   }
   closeDeleteModal()
 }
@@ -459,6 +474,7 @@ const confirmDelete = () => {
 const closeModal = () => {
   modalVisible.value = false
   selectedSubject.value = null
+  modalServerErrors.value = {}
 }
 
 const handleEditFromView = (subject) => {
@@ -472,11 +488,55 @@ const closeDeleteModal = () => {
   subjectToDelete.value = null
 }
 
-const saveSubject = (subjectData) => {
+const saveSubject = async (subjectData) => {
   if (modalMode.value === 'add') {
-    subjects.value.push(subjectData)
-    showNotification('Đã thêm môn học thành công', 'success')
-    closeModal()
+    try {
+      console.debug('Creating course payload:', subjectData)
+      await createCourse(subjectData)
+      showNotification('Đã thêm môn học thành công', 'success')
+      closeModal()
+    } catch (err) {
+      console.error('Create course failed', err)
+      // Map server details into modalServerErrors if available
+      modalServerErrors.value = {}
+      try {
+        if (err && err.details && typeof err.details === 'object') {
+          // convert backend keys to modal keys if necessary
+          const details = err.details
+          const mapped = {}
+          Object.keys(details).forEach(k => {
+            const val = details[k]
+            let target = k
+            // field mapping from API to modal
+            const map = {
+              'course_SKU': 'sku',
+              'course_name_vn': 'nameVn',
+              'course_name_en': 'nameEn',
+              'credits': 'credits',
+              'course_type': 'courseType',
+              'semester_id': 'semesterId',
+              'major_ids': 'majorIds',
+              'prerequisite_ids': 'prerequisiteIds',
+              'description': 'description',
+              'error': 'non_field_errors'
+            }
+            if (map[k]) target = map[k]
+            // normalize values: if it's string put array
+            if (Array.isArray(val)) mapped[target] = val
+            else if (typeof val === 'string') mapped[target] = [val]
+            else mapped[target] = [JSON.stringify(val)]
+          })
+          modalServerErrors.value = mapped
+        } else if (err && err.message) {
+          modalServerErrors.value = { non_field_errors: [err.message] }
+        } else {
+          modalServerErrors.value = { non_field_errors: ['Có lỗi xảy ra'] }
+        }
+      } catch (e) {
+        modalServerErrors.value = { non_field_errors: [String(err)] }
+      }
+      showNotification('Thêm môn học thất bại', 'error')
+    }
   } else if (modalMode.value === 'edit') {
     // Show update confirmation modal
     subjectToUpdate.value = subjectData
@@ -489,22 +549,59 @@ const closeUpdateSubjectModal = () => {
   subjectToUpdate.value = null
 }
 
-const confirmUpdateSubject = () => {
+const confirmUpdateSubject = async () => {
   if (!subjectToUpdate.value) return
-  
-  const index = subjects.value.findIndex(s => s.id === subjectToUpdate.value.id)
-  if (index > -1) {
-    subjects.value[index] = subjectToUpdate.value
+  try {
+    await updateCourse(subjectToUpdate.value.id || subjectToUpdate.value.id, subjectToUpdate.value)
     showNotification('Đã cập nhật môn học thành công', 'success')
+  } catch (err) {
+    console.error('Update course failed', err)
+    try {
+      modalServerErrors.value = {}
+      if (err && err.details && typeof err.details === 'object') {
+        const details = err.details
+        const mapped = {}
+        Object.keys(details).forEach(k => {
+          const val = details[k]
+          const map = {
+            'course_SKU': 'sku',
+            'course_name_vn': 'nameVn',
+            'course_name_en': 'nameEn',
+            'credits': 'credits',
+            'course_type': 'courseType',
+            'semester_id': 'semesterId',
+            'major_ids': 'majorIds',
+            'prerequisite_ids': 'prerequisiteIds',
+            'description': 'description',
+            'error': 'non_field_errors'
+          }
+          const target = map[k] || k
+          if (Array.isArray(val)) mapped[target] = val
+          else if (typeof val === 'string') mapped[target] = [val]
+          else mapped[target] = [JSON.stringify(val)]
+        })
+        modalServerErrors.value = mapped
+      } else if (err && err.message) {
+        modalServerErrors.value = { non_field_errors: [err.message] }
+      }
+    } catch(e) {
+      modalServerErrors.value = { non_field_errors: [String(err)] }
+    }
+    showNotification('Cập nhật môn học thất bại', 'error')
   }
   closeUpdateSubjectModal()
   closeModal()
 }
 
-const handleDuplicate = (duplicateData) => {
-  subjects.value.push(duplicateData)
-  showNotification('Đã nhân bản môn học thành công', 'success')
-  closeModal()
+const handleDuplicate = async (duplicateData) => {
+  try {
+    await createCourse(duplicateData)
+    showNotification('Đã nhân bản môn học thành công', 'success')
+    closeModal()
+  } catch (err) {
+    console.error('Duplicate (modal) failed', err)
+    showNotification('Nhân bản môn học thất bại', 'error')
+  }
 }
 
 const exportData = () => {
@@ -552,8 +649,21 @@ const getTypeLabel = (type) => {
   return labels[type] || type
 }
 
-const getMajorName = (majorId) => {
-  const majors = {
+const getMajorName = (majorKey) => {
+  if (majorKey === null || majorKey === undefined) return ''
+  const str = String(majorKey).trim()
+  if (!str) return ''
+
+  // Try to find using loaded majors list by id, code, or name
+  const findById = majorsList.value.find(m => String(m.major_id || m.id) === str)
+  if (findById) return findById.major_name || findById.name || (findById.major_code || findById.code) || String(findById.major_id)
+
+  const lower = str.toLowerCase()
+  const findByCode = majorsList.value.find(m => ((m.major_code || m.code) && String(m.major_code || m.code).toLowerCase() === lower) || ((m.major_name || m.name) && String(m.major_name || m.name).toLowerCase() === lower))
+  if (findByCode) return findByCode.major_name || findByCode.name || (findByCode.major_code || findByCode.code)
+
+  // Local fallback mapping for common codes
+  const shortMap = {
     'cntt': 'CNTT',
     'ktpm': 'KTPM',
     'httt': 'HTTT',
@@ -561,12 +671,27 @@ const getMajorName = (majorId) => {
     'ai': 'AI',
     'ds': 'DS'
   }
-  return majors[majorId] || majorId
+  const s = str.toLowerCase()
+  if (shortMap[s]) return shortMap[s]
+
+  // Return the original key if nothing matches
+  return str
 }
 
 // Lifecycle
-onMounted(() => {
-  // Load data or perform initial setup
+onMounted(async () => {
+  // Load initial page of courses and majors
+  try {
+    await Promise.all([
+      fetchCourses({ page: 1, limit: 100 }),
+      fetchMajors(),
+      fetchSemesters({ page: 1, limit: 100 })
+    ])
+    console.debug('Courses loaded:', (courses && courses.value && courses.value.length) || 0)
+    console.debug('Majors loaded:', (majorsList && majorsList.value && majorsList.value.length) || 0)
+  } catch (e) {
+    console.warn('Could not load courses or majors:', e)
+  }
 })
 </script>
 

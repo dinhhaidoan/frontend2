@@ -49,77 +49,58 @@
             Chọn phòng học
           </h4>
           
-          <!-- Search and Filter -->
-          <div class="search-filter">
-            <div class="search-input">
-              <i class="fas fa-search"></i>
-              <input
-                type="text"
-                v-model="searchQuery"
-                placeholder="Tìm kiếm phòng học theo tên hoặc tòa nhà..."
-              />
-            </div>
-            
-            <div class="filter-building">
-              <select v-model="selectedBuilding">
-                <option value="">Tất cả tòa nhà</option>
-                <option v-for="building in buildings" :key="building" :value="building">
-                  {{ building }}
+          <!-- Base / Floor Selector -->
+          <div class="selector-row" v-if="bases && bases.length">
+            <div class="selector-base">
+              <label>Chọn cơ sở</label>
+              <div class="selector-control">
+                <select v-model="selectedBase">
+                <option value="">-- Chọn cơ sở --</option>
+                <option v-for="b in bases" :key="b.base_id" :value="b.base_code">
+                  {{ b.base_code }} - {{ b.base_name }}
                 </option>
-              </select>
+                </select>
+                <button v-if="selectedBase" @click="clearBase" class="btn-clear" title="Xóa cơ sở">×</button>
+              </div>
+              <span v-if="basesLoading" class="loading-text">Đang tải cơ sở...</span>
             </div>
-            
-            <div class="filter-type">
-              <select v-model="selectedType">
-                <option value="">Tất cả loại phòng</option>
-                <option value="Lý thuyết">Lý thuyết</option>
-                <option value="Thực hành">Thực hành</option>
-                <option value="Máy tính">Máy tính</option>
-                <option value="Hội thảo">Hội thảo</option>
-              </select>
+
+            <div class="selector-floor">
+              <label>Chọn tầng</label>
+              <div class="selector-control">
+                <select v-model="selectedFloor" :disabled="!selectedBase || !(floorsByBase[selectedBase] && floorsByBase[selectedBase].length)">
+                <option value="">-- Chọn tầng --</option>
+                <option v-for="f in (floorsByBase[selectedBase] || [])" :key="f.floor_id" :value="f.floor_number">
+                  {{ f.floor_name || ('Lầu ' + f.floor_number) }}
+                </option>
+                </select>
+                <button v-if="selectedFloor" @click="clearFloor" class="btn-clear" title="Xóa tầng">×</button>
+              </div>
+              <span v-if="selectedBase && !(floorsByBase[selectedBase] && floorsByBase[selectedBase].length)" class="loading-text">Không có tầng cho cơ sở này</span>
             </div>
           </div>
-          
+      
           <!-- Rooms Grid -->
           <div class="rooms-grid">
+            <div v-if="!selectedBase && !fetchedRooms.length" class="no-selection">
+              <i class="fas fa-info-circle"></i>
+              <p>Chọn cơ sở và tầng để tải danh sách phòng.</p>
+            </div>
             <div 
-              v-for="room in filteredRooms" 
-              :key="room.id"
+              v-for="room in fetchedRooms" 
+              :key="room.room_id || room.id"
               class="room-card"
-              :class="{ selected: selectedRoomId === room.id }"
+              :class="{ selected: selectedRoomId === (room.room_id || room.id) }"
               @click="selectRoom(room)"
             >
               <div class="room-header">
-                <div class="room-name">{{ room.name }}</div>
-                <div class="room-building">{{ room.building }}</div>
+                <div class="room-name">{{ (room.room_name || room.name) }}</div>
+                <div class="room-building">{{ roomLabel(room) }}</div>
               </div>
               
-              <div class="room-details">
-                <div class="room-capacity">
-                  <i class="fas fa-users"></i>
-                  {{ room.capacity }} chỗ
-                </div>
-                <div class="room-type">
-                  <i class="fas fa-tag"></i>
-                  {{ room.type }}
-                </div>
-              </div>
-              
-              <div class="room-equipment" v-if="room.equipment && room.equipment.length > 0">
-                <div class="equipment-label">Thiết bị:</div>
-                <div class="equipment-list">
-                  <span 
-                    v-for="equipment in room.equipment" 
-                    :key="equipment"
-                    class="equipment-item"
-                  >
-                    {{ equipment }}
-                  </span>
-                </div>
-              </div>
-              
+
               <div class="selection-indicator">
-                <i v-if="selectedRoomId === room.id" class="fas fa-check-circle"></i>
+                <i v-if="selectedRoomId === (room.room_id || room.id)" class="fas fa-check-circle"></i>
                 <i v-else class="far fa-circle"></i>
               </div>
             </div>
@@ -145,12 +126,6 @@
               </div>
             </div>
           </div>
-          
-          <!-- No Results -->
-          <div v-if="filteredRooms.length === 0 && (searchQuery || selectedBuilding || selectedType)" class="no-results">
-            <i class="fas fa-search"></i>
-            <p>Không tìm thấy phòng học nào phù hợp</p>
-          </div>
         </div>
       </div>
       
@@ -169,7 +144,8 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRooms } from '@/hooks/useRooms'
 
 export default {
   name: 'RoomAssignModal',
@@ -189,47 +165,55 @@ export default {
     const selectedBuilding = ref('')
     const selectedType = ref('')
     const selectedRoomId = ref(undefined)
+    const selectedBase = ref('')
+    const selectedFloor = ref(null)
     
-    const buildings = computed(() => {
-      const uniqueBuildings = [...new Set(props.rooms.map(room => room.building))]
-      return uniqueBuildings.sort()
-    })
+    const { bases, basesLoading, fetchBases, fetchFloorsByBaseCode, fetchRoomsByBaseAndFloor, floorsByBase, roomsByFloor, parseRoomCode } = useRooms()
     
-    const filteredRooms = computed(() => {
-      let result = props.rooms
-      
-      if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        result = result.filter(room => 
-          room.name.toLowerCase().includes(query) ||
-          room.building.toLowerCase().includes(query) ||
-          (room.equipment && room.equipment.some(eq => eq.toLowerCase().includes(query)))
-        )
-      }
-      
-      if (selectedBuilding.value) {
-        result = result.filter(room => room.building === selectedBuilding.value)
-      }
-      
-      if (selectedType.value) {
-        result = result.filter(room => room.type === selectedType.value)
-      }
-      
-      return result
-    })
-    
+    const fetchedRooms = ref([])
+
+    const roomLabel = (room) => {
+      if (!room) return ''
+      const code = room.room_code || room.roomCode || room.room_code || room.code || room.name || ''
+      const parsed = parseRoomCode(code)
+      const baseName = parsed && parsed.base_code ? (bases.value.find(b => b.base_code === parsed.base_code)?.base_name || `Cơ sở ${parsed.base_code}`) : (room.base_name || room.building || '')
+      const floorName = parsed && parsed.floor_number ? `Lầu ${parsed.floor_number}` : (room.floor_number ? `Lầu ${room.floor_number}` : '')
+      const roomName = room.room_name || room.room_code || room.name || code
+      return `${baseName}${floorName ? ' -> ' + floorName : ''}${roomName ? ' - Phòng ' + roomName : ''}`
+    }
+
     const selectRoom = (room) => {
-      selectedRoomId.value = room ? room.id : null
+      selectedRoomId.value = room ? (room.room_id || room.id || null) : null
+      // set base / floor for UI if room contains room_code or base/floor info
+      if (room && room.room_code) {
+        const parsed = parseRoomCode(room.room_code || room.name || '')
+        if (parsed?.base_code) selectedBase.value = parsed.base_code
+        if (parsed?.floor_number) selectedFloor.value = parsed.floor_number
+      }
+    }
+
+    const clearBase = () => {
+      selectedBase.value = ''
+      selectedFloor.value = null
+      fetchedRooms.value = []
+      selectedRoomId.value = undefined
+    }
+
+    const clearFloor = () => {
+      selectedFloor.value = null
+      fetchedRooms.value = []
+      selectedRoomId.value = undefined
     }
     
     const handleSave = () => {
       if (selectedRoomId.value === undefined) return
       
-      const roomData = {
-        roomId: selectedRoomId.value,
-        roomName: selectedRoomId.value ? 
-          props.rooms.find(r => r.id === selectedRoomId.value)?.name : null
-      }
+      const roomData = (() => {
+        if (selectedRoomId.value === null) return { roomId: null, roomName: null }
+        // try to find room in fetched rooms first
+        const rn = (fetchedRooms.value.find(r => (r.room_id || r.id) === selectedRoomId.value) || (props.rooms || []).find(r => (r.room_id || r.id) === selectedRoomId.value)) || null
+        return { roomId: selectedRoomId.value, roomName: rn ? (rn.room_name || rn.room_code || rn.name || '') : undefined, room: rn }
+      })()
       
       emit('save', roomData)
     }
@@ -237,17 +221,55 @@ export default {
     const handleOverlayClick = () => {
       emit('close')
     }
+
+    // --- Load initial bases and fallback rooms ---
+    onMounted(async () => {
+      try {
+        await fetchBases()
+      } catch (e) {
+        console.debug('fetch bases failed', e)
+      }
+    })
+
+    watch(selectedBase, async (base) => {
+      if (base) {
+        // clear old floor and selected room
+        selectedFloor.value = null
+        fetchedRooms.value = []
+        try {
+          await fetchFloorsByBaseCode(base)
+        } catch (e) {
+          console.debug('fetch floors failed', e)
+        }
+      }
+    })
+
+    watch(selectedFloor, async (fl) => {
+      if (!fl || !selectedBase.value) return
+      // fetch rooms for base + floor number
+      try {
+        const r = await fetchRoomsByBaseAndFloor(selectedBase.value, fl)
+        fetchedRooms.value = Array.isArray(r) ? r : (r.rooms || [])
+      } catch (e) {
+        console.debug('fetch rooms failed', e)
+        fetchedRooms.value = []
+      }
+    })
     
     return {
-      searchQuery,
-      selectedBuilding,
-      selectedType,
       selectedRoomId,
-      buildings,
-      filteredRooms,
+      selectedBase,
+      selectedFloor,
+      bases,
+      basesLoading,
+      floorsByBase,
+      fetchedRooms,
+      roomLabel,
       selectRoom,
       handleSave,
-      handleOverlayClick
+      handleOverlayClick,
+      clearBase,
+      clearFloor
     }
   }
 }
@@ -414,6 +436,55 @@ export default {
   grid-template-columns: 1fr auto auto;
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.selector-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: flex-end;
+}
+.selector-base label, .selector-floor label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  display: block;
+}
+.selector-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.selector-control select {
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+.btn-clear {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #6b7280;
+  cursor: pointer;
+  font-weight: 700;
+}
+.btn-clear:hover { background: #f3f4f6; color: #374151; }
+.loading-text {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-left: 8px;
+}
+.no-selection {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding: 16px;
+  color: #64748b;
 }
 
 .search-input {

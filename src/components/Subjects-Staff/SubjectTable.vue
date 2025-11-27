@@ -156,6 +156,14 @@
                   <i class="fas fa-copy"></i>
                 </button>
                 
+                <button
+                  @click="$emit('assign:teacher', subject)"
+                  class="action-btn teacher"
+                  title="Gán giáo viên"
+                >
+                  <i class="fas fa-chalkboard-teacher"></i>
+                </button>
+                
                 <button 
                   @click="$emit('delete:subject', subject)"
                   class="action-btn delete"
@@ -211,7 +219,8 @@ export default {
     'view:subject', 
     'view:students',
     'duplicate:subject',
-    'toggle:registration'
+    'toggle:registration',
+    'assign:teacher'
   ],
   setup(props, { emit }) {
     const selectedIds = computed(() => props.selectedSubjects.map(s => s.id))
@@ -599,6 +608,15 @@ export default {
 
 .action-btn.delete:hover {
   background: #fee2e2;
+}
+
+.action-btn.teacher {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.action-btn.teacher:hover {
+  background: #ffedd5;
 }
 
 .loading-state,

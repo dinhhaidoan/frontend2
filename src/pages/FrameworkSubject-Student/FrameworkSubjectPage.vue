@@ -125,7 +125,7 @@
                 </div>
                 
                 <div v-if="subject.prerequisites.length > 0" class="prerequisites">
-                  <small>Môn tiên quyết: {{ subject.prerequisites.join(', ') }}</small>
+                  <small>Môn tiên quyết: {{ subject.prerequisites.map(p => getCourseLabel(p)).join(', ') }}</small>
                 </div>
                 
                 <div v-if="subject.grade" class="grade-info">
@@ -474,10 +474,27 @@ const showNotification = (message, type = 'info') => {
   console.log(`${type.toUpperCase()}: ${message}`)
 }
 
+// Courses lookup for resolving prerequisites (use live courses for names if available)
+import { useCourses } from '@/hooks/useCourses'
+const { courses, fetchCourses } = useCourses()
+
 // Lifecycle
-onMounted(() => {
-  // Load student data or perform initial setup
+onMounted(async () => {
+  try {
+    await fetchCourses({ page: 1, limit: 100 })
+  } catch(e) {
+    // ignore, fallback to local subject.prerequisites values
+  }
 })
+
+const getCourseLabel = (courseRef) => {
+  if (!courseRef && courseRef !== 0) return ''
+  const s = String(courseRef)
+  // find in global courses
+  const found = (courses && courses.value ? courses.value : []).map(c => c.raw || c).find(c => String(c.id || c.course_id || c.sku || c.course_SKU || c.code) === s)
+  if (found) return (found.sku || found.course_SKU || found.code || String(found.id)) + (found.course_name_vn || found.name_vn || found.name ? ' - ' + (found.course_name_vn || found.name_vn || found.name) : '')
+  return s
+}
 </script>
 
 <style scoped>
