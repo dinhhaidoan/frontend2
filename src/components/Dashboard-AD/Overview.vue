@@ -1,7 +1,7 @@
 <template>
   <div class="overview-page">
     <!-- Admin Dashboard -->
-    <AdminOverview v-if="userRole === 'admin'" />
+    <AdminOverview v-if="currentRole === 'admin'" />
     
     <!-- Default Dashboard for other roles -->
     <div v-else>

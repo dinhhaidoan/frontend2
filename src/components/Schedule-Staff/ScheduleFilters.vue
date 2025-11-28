@@ -43,25 +43,6 @@
           </option>
         </select>
       </div>
-
-      <!-- Subject -->
-      <div class="filter-group">
-        <label>Môn học</label>
-        <select 
-          :value="filters.subject"
-          @change="updateFilter('subject', $event.target.value)"
-        >
-          <option value="">Tất cả môn học</option>
-          <option 
-            v-for="subject in subjects" 
-            :key="subject.id" 
-            :value="subject.id"
-          >
-            {{ subject.code }} - {{ subject.name }}
-          </option>
-        </select>
-      </div>
-
       <!-- Teacher -->
       <div class="filter-group">
         <label>Giáo viên</label>
@@ -79,25 +60,6 @@
           </option>
         </select>
       </div>
-
-      <!-- Room -->
-      <div class="filter-group">
-        <label>Phòng học</label>
-        <select 
-          :value="filters.room"
-          @change="updateFilter('room', $event.target.value)"
-        >
-          <option value="">Tất cả phòng</option>
-          <option 
-            v-for="room in rooms" 
-            :key="room.id" 
-            :value="room.id"
-          >
-            {{ room.name }} - {{ room.building }}
-          </option>
-        </select>
-      </div>
-
       <!-- Day of Week -->
       <div class="filter-group">
         <label>Thứ trong tuần</label>
@@ -129,36 +91,6 @@
           <option value="13:00-15:00">Tiết 5-6 (13:00-15:00)</option>
           <option value="15:00-17:00">Tiết 7-8 (15:00-17:00)</option>
           <option value="18:00-20:00">Tiết 9-10 (18:00-20:00)</option>
-        </select>
-      </div>
-
-      <!-- Exam Type (for exam schedules) -->
-      <div v-if="activeTab === 'exam'" class="filter-group">
-        <label>Loại thi</label>
-        <select 
-          :value="filters.examType"
-          @change="updateFilter('examType', $event.target.value)"
-        >
-          <option value="">Tất cả loại thi</option>
-          <option value="midterm">Giữa kỳ</option>
-          <option value="final">Cuối kỳ</option>
-          <option value="makeup">Thi lại</option>
-          <option value="improvement">Thi cải thiện</option>
-        </select>
-      </div>
-
-      <!-- Status -->
-      <div class="filter-group">
-        <label>Trạng thái</label>
-        <select 
-          :value="filters.status"
-          @change="updateFilter('status', $event.target.value)"
-        >
-          <option value="">Tất cả trạng thái</option>
-          <option value="scheduled">Đã xếp lịch</option>
-          <option value="draft">Nháp</option>
-          <option value="cancelled">Đã hủy</option>
-          <option value="completed">Hoàn thành</option>
         </select>
       </div>
     </div>

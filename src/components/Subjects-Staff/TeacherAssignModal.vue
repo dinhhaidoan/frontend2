@@ -67,7 +67,7 @@
               v-for="teacher in filteredTeachers" 
               :key="teacher.id"
               class="teacher-card"
-              :class="{ selected: selectedTeacherId === teacher.id }"
+              :class="{ selected: selectedTeacherId === teacher.teacher_id }"
               @click="selectTeacher(teacher)"
             >
               <div class="teacher-info">
@@ -158,7 +158,7 @@ export default {
     })
     
     const selectTeacher = (teacher) => {
-      selectedTeacherId.value = teacher ? teacher.id : null
+      selectedTeacherId.value = teacher ? teacher.teacher_id : null
     }
     
     const handleSave = () => {
@@ -167,7 +167,7 @@ export default {
       const teacherData = {
         teacherId: selectedTeacherId.value,
         teacherName: selectedTeacherId.value ? 
-          props.teachers.find(t => t.id === selectedTeacherId.value)?.name : null
+          props.teachers.find(t => t.teacher_id === selectedTeacherId.value)?.name : null
       }
       
       emit('save', teacherData)

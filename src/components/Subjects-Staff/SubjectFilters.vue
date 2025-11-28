@@ -56,29 +56,15 @@
         </select>
       </div>
       
-      <!-- Room -->
-      <div class="filter-group">
-        <label>Phòng học</label>
-        <select v-model="localFilters.room" @change="updateFilters">
-          <option value="">Tất cả phòng</option>
-          <option 
-            v-for="room in rooms" 
-            :key="room.id" 
-            :value="room.id"
-          >
-            {{ room.name }} - {{ room.building }}
-          </option>
-        </select>
-      </div>
       
       <!-- Status -->
       <div class="filter-group">
-        <label>Trạng thái</label>
-        <select v-model="localFilters.status" @change="updateFilters">
-          <option value="">Tất cả trạng thái</option>
-          <option value="active">Hoạt động</option>
-          <option value="inactive">Không hoạt động</option>
-          <option value="pending">Chờ duyệt</option>
+        <label>Trạng thái lớp</label>
+        <select v-model="localFilters.classStatus" @change="updateFilters">
+          <option value="">Tất cả trạng thái lớp</option>
+          <option value="open">Mở đăng ký</option>
+          <option value="teaching">Đang dạy</option>
+          <option value="closed">Đã kết thúc</option>
         </select>
       </div>
       
@@ -92,16 +78,6 @@
         </select>
       </div>
       
-      <!-- Department -->
-      <div class="filter-group">
-        <label>Khoa/Bộ môn</label>
-        <select v-model="localFilters.department" @change="updateFilters">
-          <option value="">Tất cả khoa</option>
-          <option value="CNTT">Công nghệ thông tin</option>
-          <option value="DTVT">Điện tử viễn thông</option>
-          <option value="TOÁN">Toán ứng dụng</option>
-        </select>
-      </div>
       
       <!-- Credits -->
       <div class="filter-group">
@@ -140,6 +116,10 @@
         <span v-if="localFilters.status" class="filter-tag">
           {{ getStatusLabel(localFilters.status) }}
           <i class="fas fa-times" @click="removeFilter('status')"></i>
+        </span>
+        <span v-if="localFilters.classStatus" class="filter-tag">
+          {{ getClassStatusLabel(localFilters.classStatus) }}
+          <i class="fas fa-times" @click="removeFilter('classStatus')"></i>
         </span>
         <span v-if="localFilters.registrationStatus" class="filter-tag">
           {{ getRegistrationStatusLabel(localFilters.registrationStatus) }}
@@ -200,6 +180,7 @@ export default {
         teacher: '',
         room: '',
         status: '',
+        classStatus: '',
         registrationStatus: '',
         department: '',
         credits: ''
@@ -241,6 +222,14 @@ export default {
       const labels = {
         open: 'Mở đăng ký',
         closed: 'Đóng đăng ký'
+      }
+      return labels[status] || status
+    }
+    const getClassStatusLabel = (status) => {
+      const labels = {
+        open: 'Mở đăng ký',
+        teaching: 'Đang dạy',
+        closed: 'Đã kết thúc'
       }
       return labels[status] || status
     }

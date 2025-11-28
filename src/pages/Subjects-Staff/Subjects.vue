@@ -51,6 +51,7 @@
       :subjects="filteredSubjects"
       :loading="loading"
       :selected-subjects="selectedSubjects"
+      :semesters="semesters"
       @select:subjects="handleSubjectSelection"
       @edit:subject="editSubject"
       @delete:subject="deleteSubject"
@@ -81,6 +82,7 @@
       :rooms="rooms"
       :semesters="semesters"
       :is-edit="isEditMode"
+      :server-errors="modalServerErrors"
       @close="closeSubjectModal"
       @save="saveSubject"
     />
@@ -88,6 +90,7 @@
     <SubjectViewModal 
       v-if="showViewModal"
       :subject="viewingSubject"
+      :semesters="semesters"
       @close="closeViewModal"
     />
 
@@ -145,7 +148,12 @@ import SubjectModal from '@/components/Subjects-Staff/SubjectModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import SubjectViewModal from '@/components/Subjects-Staff/SubjectViewModal.vue'
 import { useSemesters } from '@/hooks/useSemesters'
+import { useCourseClasses } from '@/hooks/useCourseClasses'
 import { useMajors } from '@/hooks/useMajors'
+import { useCourses } from '@/hooks/useCourses'
+import { useTeachers } from '@/hooks/useTeachers'
+import { useRooms } from '@/hooks/useRooms'
+import shareService from '@/services/shareService'
 import TeacherAssignModal from '@/components/Subjects-Staff/TeacherAssignModal.vue'
 import RoomAssignModal from '@/components/Subjects-Staff/RoomAssignModal.vue'
 import RegistrationModal from '@/components/Subjects-Staff/RegistrationModal.vue'
@@ -169,10 +177,10 @@ export default {
     // State
     const loading = ref(false)
     const subjects = ref([])
-    const frameworkSubjects = ref([])
     const { semesters, fetchSemesters } = useSemesters()
     const { majors: majorsList, fetchMajors } = useMajors()
-    const teachers = ref([])
+    const { courses: frameworkSubjects, fetchCourses } = useCourses()
+    const { teachers, fetchTeachers } = useTeachers()
     const rooms = ref([])
     const selectedSubjects = ref([])
     const registrationConfig = ref({})
@@ -188,6 +196,7 @@ export default {
     const selectedSubjectForStudents = ref(null)
     const viewingSubject = ref(null)
     const isEditMode = ref(false)
+    const modalServerErrors = ref({})
     const confirmDialog = ref({ show: false, type: 'warning', title: '', message: '', payload: null })
 
     // Filters
@@ -305,18 +314,22 @@ export default {
     // Methods
     const toast = useToast()
 
+    const { courseClasses, fetchCourseClasses, createCourseClass, updateCourseClass, deleteCourseClass, loading: classesLoading } = useCourseClasses()
+
     const loadData = async () => {
       loading.value = true
       try {
         await Promise.all([
-            loadSubjects(),
-            loadFrameworkSubjects(),
+            fetchCourseClasses({ page: 1, limit: 200 }),
+            fetchCourses({ page: 1, limit: 200 }),
             loadSemesters(),
-            loadTeachers(),
+            fetchTeachers({ page: 1, limit: 200 }),
             loadRooms(),
             loadRegistrationConfig(),
             fetchMajors()
           ])
+        // sync local subjects from hook
+        await loadSubjects()
       } catch (error) {
         console.error('Lỗi khi tải dữ liệu:', error)
       } finally {
@@ -324,72 +337,39 @@ export default {
       }
     }
 
+    // We'll populate `subjects` from the courseClass hook result
     const loadSubjects = async () => {
-      // Mock data - thay thế bằng API call thực tế
-      subjects.value = [
-        {
-          id: 1,
-          code: 'CS101-01',
-          name: 'Lập trình cơ bản',
-          frameworkSubjectId: 1,
-          semesterId: 1,
-          teacherId: 1,
-          teacherName: 'Nguyễn Văn A',
-          roomId: 1,
-          roomName: 'P301',
-          credits: 3,
-          maxStudents: 40,
-          registeredCount: 25,
-          status: 'active',
-          registrationOpen: true,
-          department: 'CNTT',
-          description: 'Môn học cơ bản về lập trình',
-          schedule: 'Thứ 2, 4, 6 - 7:00-9:00',
-          createdAt: '2024-01-15'
-        },
-        {
-          id: 2,
-          code: 'CS101-02',
-          name: 'Lập trình cơ bản',
-          frameworkSubjectId: 1,
-          semesterId: 1,
-          teacherId: 2,
-          teacherName: 'Trần Thị B',
-          roomId: 2,
-          roomName: 'P302',
-          credits: 3,
-          maxStudents: 40,
-          registeredCount: 30,
-          status: 'active',
-          registrationOpen: true,
-          department: 'CNTT',
-          description: 'Môn học cơ bản về lập trình - Lớp 2',
-          schedule: 'Thứ 3, 5, 7 - 7:00-9:00',
-          createdAt: '2024-01-15'
-        }
-      ]
+      // Map courseClasses hook into subjects array
+      subjects.value = (courseClasses && courseClasses.value) ? courseClasses.value.map(c => ({ ...c })) : []
+
+      // Ensure display names (teacherName, roomName) are populated for UI
+      // Backend may only return teacher_id/room_id without joined names, so fill from local lookups
+      try {
+        subjects.value = subjects.value.map(s => {
+          const subj = { ...s }
+          // Normalize teacher lookup: our teachers list exposes teacher_id as profile id
+          if (subj.teacherId && (!subj.teacherName || subj.teacherName === '')) {
+            const t = (teachers && teachers.value) ? teachers.value.find(x => String(x.teacher_id) === String(subj.teacherId) || String(x.id) === String(subj.teacherId)) : null
+            if (t) subj.teacherName = t.name || subj.teacherName || ''
+          }
+
+          // Normalize room lookup
+          if (subj.roomId && (!subj.roomName || subj.roomName === '')) {
+            const r = (rooms && rooms.value) ? rooms.value.find(x => String(x.room_id || x.id) === String(subj.roomId) || String(x.id) === String(subj.roomId)) : null
+            if (r) subj.roomName = r.room_name || r.name || subj.roomName || ''
+          }
+
+          return subj
+        })
+      } catch (e) {
+        // non-fatal: log for debugging and continue
+        console.debug('loadSubjects: failed to populate teacher/room names', e)
+      }
     }
 
     const loadFrameworkSubjects = async () => {
-      // Mock data - lấy từ trang chương trình đào tạo
-      frameworkSubjects.value = [
-        {
-          id: 1,
-          code: 'CS101',
-          name: 'Lập trình cơ bản',
-          credits: 3,
-          description: 'Môn học cơ bản về lập trình',
-          department: 'CNTT'
-        },
-        {
-          id: 2,
-          code: 'CS102',
-          name: 'Cấu trúc dữ liệu',
-          credits: 3,
-          description: 'Môn học về cấu trúc dữ liệu và giải thuật',
-          department: 'CNTT'
-        }
-      ]
+      // Now using useCourses hook
+      await fetchCourses({ page: 1, limit: 200 })
     }
 
     const loadSemesters = async () => {
@@ -401,45 +381,18 @@ export default {
     }
 
     const loadTeachers = async () => {
-      // Mock data
-      teachers.value = [
-        {
-          id: 1,
-          name: 'Nguyễn Văn A',
-          email: 'nguyenvana@email.com',
-          department: 'CNTT',
-          specialization: 'Lập trình'
-        },
-        {
-          id: 2,
-          name: 'Trần Thị B',
-          email: 'tranthib@email.com',
-          department: 'CNTT',
-          specialization: 'Cơ sở dữ liệu'
-        }
-      ]
+      // Now using useTeachers hook
+      await fetchTeachers({ page: 1, limit: 200 })
     }
 
     const loadRooms = async () => {
-      // Mock data
-      rooms.value = [
-        {
-          id: 1,
-          name: 'P301',
-          building: 'Tòa A',
-          capacity: 50,
-          type: 'Lý thuyết',
-          equipment: ['Máy chiếu', 'Máy tính']
-        },
-        {
-          id: 2,
-          name: 'P302',
-          building: 'Tòa A',
-          capacity: 45,
-          type: 'Lý thuyết',
-          equipment: ['Máy chiếu']
-        }
-      ]
+      try {
+        const res = await shareService.listRooms()
+        rooms.value = res.rooms || res || []
+      } catch (err) {
+        console.error('Failed to load rooms', err)
+        rooms.value = []
+      }
     }
 
     const loadRegistrationConfig = async () => {
@@ -453,8 +406,16 @@ export default {
     }
 
     // Filter methods
-    const updateFilters = (newFilters) => {
+    const updateFilters = async (newFilters) => {
       filters.value = { ...filters.value, ...newFilters }
+      // Fetch from backend with search and status
+      try {
+        const statusToUse = filters.value.classStatus || filters.value.status || ''
+        await fetchCourseClasses({ page: 1, limit: 200, q: filters.value.search || '', status: statusToUse })
+        await loadSubjects()
+      } catch (err) {
+        console.error('Failed to fetch course classes for filters', err)
+      }
     }
 
     const resetFilters = () => {
@@ -474,12 +435,14 @@ export default {
     const openAddSubjectModal = () => {
       editingSubject.value = null
       isEditMode.value = false
+      modalServerErrors.value = {}
       showSubjectModal.value = true
     }
 
     const editSubject = (subject) => {
       editingSubject.value = { ...subject }
       isEditMode.value = true
+      modalServerErrors.value = {}
       showSubjectModal.value = true
     }
 
@@ -510,7 +473,7 @@ export default {
       showViewModal.value = true
     }
 
-    const saveSubject = (subjectData) => {
+    const saveSubject = async (subjectData) => {
       if (isEditMode.value) {
         // Show confirmation before updating subject
         confirmDialog.value = {
@@ -522,15 +485,74 @@ export default {
         }
         return
       }
-      // Add new subject
-      const newSubject = {
-        ...subjectData,
-        id: Date.now(),
-        registeredCount: 0,
-        createdAt: new Date().toISOString().split('T')[0]
+      // Build API payload mapping from FE to BE naming
+      try {
+        console.log('Selected teacher ID from form:', subjectData.teacherId)
+        const selectedTeacher = teachers.value.find(t => t.teacher_id == subjectData.teacherId)
+        const teacherIdToSend = selectedTeacher ? selectedTeacher.teacher_id : null // Use teacher profile id
+        console.log('Teacher ID to send to API:', teacherIdToSend)
+        
+        // If base/floor isn't provided but a room is selected, try to derive them from the room object
+        let inferredBaseId = subjectData.baseId || null
+        let inferredFloorId = subjectData.floorId || null
+        if ((!inferredBaseId || !inferredFloorId) && subjectData.roomId) {
+          const roomObj = (rooms && rooms.value) ? rooms.value.find(r => String(r.room_id || r.id) === String(subjectData.roomId) || String(r.id) === String(subjectData.roomId)) : null
+          if (roomObj) {
+            if (!inferredBaseId) inferredBaseId = roomObj.base_id || roomObj.baseId || null
+            if (!inferredFloorId) inferredFloorId = roomObj.floor_id || roomObj.floorId || null
+          }
+        }
+
+        const payload = {
+          course_id: subjectData.frameworkSubjectId,
+          // only include suffix if provided
+          ...(subjectData.classSuffix ? { course_class_suffix: Number(subjectData.classSuffix) } : {}),
+          teacher_id: teacherIdToSend,
+          room_id: subjectData.roomId || null,
+          base_id: inferredBaseId || null,
+          floor_id: inferredFloorId || null,
+          capacity: subjectData.maxStudents || subjectData.capacity || null,
+          description: subjectData.description || '',
+          semester_id: subjectData.semesterId || null,
+          // convert FE classStatus to BE status
+          status: (subjectData.classStatus || 'open')
+        }
+        console.log('Creating course class with payload:', payload)
+        const created = await createCourseClass(payload)
+        // Populate teacher and room names for display
+        if (created.teacherId) {
+          const teacher = teachers.value.find(t => t.teacher_id == created.teacherId)
+          created.teacherName = teacher ? teacher.name : ''
+        }
+        if (created.roomId) {
+          const room = rooms.value.find(r => String(r.id) === String(created.roomId)) || rooms.value.find(r => String(r.room_id || r.id) === String(created.roomId))
+          created.roomName = room ? room.name : ''
+        }
+        // ensure base/floor ids present for immediate UI
+        if (!created.baseId && payload && payload.base_id) created.baseId = payload.base_id
+        if (!created.floorId && payload && payload.floor_id) created.floorId = payload.floor_id
+        // add to our subjects array - createCourseClass will refetch, but we also update local list for immediate UX
+        subjects.value.push(created)
+        closeSubjectModal()
+        toast.success('Tạo lớp học thành công')
+      } catch (err) {
+        console.error('Failed to create course class', err)
+        // If the backend responded with duplicate SKU, show informative error
+        if (err && (err.status === 409 || err.status === 400) && err.details) {
+          // look for keys that indicate sku/suffix duplication
+          const detailKeys = Object.keys(err.details || {})
+          if (detailKeys.some(k => k.includes('course_class_SKU') || k.includes('course_class_suffix') || k.includes('course_class') || k.includes('sku') || k.includes('suffix'))) {
+            toast.error('Mã lớp (SKU) trùng. Vui lòng chọn suffix khác hoặc làm mới trang.')
+            modalServerErrors.value = { course_class_SKU: [err.message || 'SKU duplicate'] }
+            return
+          }
+        }
+        toast.error(err.message || 'Tạo lớp học thất bại')
+        // if error contains details, show in modal
+        if (err && err.details) {
+          modalServerErrors.value = err.details
+        }
       }
-      subjects.value.push(newSubject)
-      closeSubjectModal()
     }
 
     const closeSubjectModal = () => {
@@ -576,17 +598,31 @@ export default {
       showRoomModal.value = true
     }
 
-    const bulkToggleRegistration = () => {
+    const bulkToggleRegistration = async () => {
+      if (!selectedSubjects.value.length) return
       const hasOpenRegistration = selectedSubjects.value.some(s => s.registrationOpen)
       const newStatus = !hasOpenRegistration
-      
-      selectedSubjects.value.forEach(subject => {
-        const index = subjects.value.findIndex(s => s.id === subject.id)
-        if (index > -1) {
-          subjects.value[index].registrationOpen = newStatus
+      const statusStr = newStatus ? 'open' : 'closed'
+      try {
+        const results = await Promise.allSettled(selectedSubjects.value.map(s => updateCourseClass(s.id, { status: statusStr })))
+        const successes = results.filter(r => r.status === 'fulfilled').length
+        const failed = results.filter(r => r.status === 'rejected')
+        if (successes > 0) {
+          selectedSubjects.value.forEach(subject => {
+            const index = subjects.value.findIndex(s => s.id === subject.id)
+            if (index > -1) subjects.value[index].registrationOpen = newStatus
+          })
+          toast.success(`Cập nhật trạng thái cho ${successes} lớp thành công`)
         }
-      })
-      clearSelection()
+        if (failed.length > 0) {
+          toast.error(`${failed.length} lớp cập nhật thất bại`)
+          console.error('bulkToggleRegistration failed results', failed)
+        }
+        clearSelection()
+      } catch (err) {
+        console.error('bulk toggle registration error', err)
+        toast.error(err.message || 'Cập nhật trạng thái đăng ký thất bại')
+      }
     }
 
     // Modal handlers
@@ -620,56 +656,133 @@ export default {
       }
     }
 
-    const confirmDialogConfirm = () => {
+    const confirmDialogConfirm = async () => {
       const p = confirmDialog.value.payload
       if (!p) { confirmDialog.value.show = false; return }
       if (p.action === 'updateSubject') {
         const subjectData = p.data
-        const idx = subjects.value.findIndex(s => s.id === editingSubject.value.id)
-        if (idx > -1) subjects.value[idx] = { ...subjectData }
-        closeSubjectModal()
-        toast.success('Cập nhật môn học thành công', `Lưu thay đổi cho môn học "${subjectData.name || subjectData.code}"`)
+        try {
+          // Map update to API payload
+          const payload = {
+            teacher_id: subjectData.teacherId || null,
+            room_id: subjectData.roomId || null,
+            base_id: subjectData.baseId || null,
+            floor_id: subjectData.floorId || null,
+            capacity: subjectData.maxStudents || subjectData.capacity || null,
+            description: subjectData.description || '',
+            semester_id: subjectData.semesterId || null,
+            status: (subjectData.classStatus || 'open')
+          }
+          if (subjectData.classSuffix) payload.course_class_suffix = Number(subjectData.classSuffix)
+          await updateCourseClass(subjectData.id, payload)
+          // Update local UI value
+          const idx = subjects.value.findIndex(s => s.id === subjectData.id)
+          if (idx > -1) subjects.value[idx] = { ...subjects.value[idx], ...subjectData }
+          closeSubjectModal()
+          toast.success('Cập nhật lớp học thành công', `Lưu thay đổi cho lớp "${subjectData.name || subjectData.code}"`)
+        } catch (err) {
+          console.error('Update course class failed', err)
+          toast.error(err.message || 'Cập nhật lớp học thất bại')
+        }
       }
       if (p.action === 'assignTeacher') {
         const teacherData = p.data
-        selectedSubjects.value.forEach(subject => {
-          const index = subjects.value.findIndex(s => s.id === subject.id)
-          if (index > -1) {
-            subjects.value[index].teacherId = teacherData.teacherId
-            subjects.value[index].teacherName = teacherData.teacherName
-          }
-        })
-        closeTeacherModal()
-        toast.success('Gán giáo viên thành công', `Giáo viên "${teacherData.teacherName || '---'}" đã được gán`)        
-        clearSelection()
+        // Perform API updates for each selected subject
+        try {
+          await Promise.all(selectedSubjects.value.map(sub => updateCourseClass(sub.id, { teacher_id: teacherData.teacherId })))
+          selectedSubjects.value.forEach(subject => {
+            const index = subjects.value.findIndex(s => s.id === subject.id)
+            if (index > -1) {
+              subjects.value[index].teacherId = teacherData.teacherId
+              subjects.value[index].teacherName = teacherData.teacherName
+            }
+          })
+          closeTeacherModal()
+          toast.success('Gán giáo viên thành công', `Giáo viên "${teacherData.teacherName || '---'}" đã được gán`)        
+          clearSelection()
+        } catch (err) {
+          console.error('Assign teacher failed', err)
+          toast.error(err.message || 'Gán giáo viên thất bại')
+        }
       }
       if (p.action === 'assignRoom') {
         const roomData = p.data
-        selectedSubjects.value.forEach(subject => {
-          const index = subjects.value.findIndex(s => s.id === subject.id)
-          if (index > -1) {
-            subjects.value[index].roomId = roomData.roomId
-            subjects.value[index].roomName = roomData.roomName
-          }
-        })
-        closeRoomModal()
-        toast.success('Gán phòng thành công', `Phòng "${roomData.roomName || '---'}" đã được gán`)
-        clearSelection()
+        try {
+          await Promise.all(selectedSubjects.value.map(sub => updateCourseClass(sub.id, { room_id: roomData.roomId, base_id: roomData.baseId || null, floor_id: roomData.floorId || null })))
+          selectedSubjects.value.forEach(subject => {
+            const index = subjects.value.findIndex(s => s.id === subject.id)
+            if (index > -1) {
+              subjects.value[index].roomId = roomData.roomId
+              subjects.value[index].roomName = roomData.roomName
+            }
+          })
+          closeRoomModal()
+          toast.success('Gán phòng thành công', `Phòng "${roomData.roomName || '---'}" đã được gán`)
+          clearSelection()
+        } catch (err) {
+          console.error('Assign room failed', err)
+          toast.error(err.message || 'Gán phòng thất bại')
+        }
       }
       if (p.action === 'deleteSubject') {
         const subjectData = p.data
-        const idx = subjects.value.findIndex(s => s.id === subjectData.id)
+        try {
+          await deleteCourseClass(subjectData.id)
+          const idx = subjects.value.findIndex(s => s.id === subjectData.id)
+          if (idx > -1) {
+            subjects.value.splice(idx, 1)
+            toast.success(`Xóa thành công`, `Lớp "${subjectData.name || subjectData.code}" đã được xóa`)
+          }
+        } catch (err) {
+          // surface backend errors - e.g., has enrollments
+          console.error('Delete course class failed', err)
+          if (err && err.status === 400) {
+            toast.error(err.message || 'Không thể xóa: có sinh viên đang đăng ký')
+          } else {
+            toast.error(err.message || 'Xóa lớp học thất bại')
+          }
+        }
+      }
+      if (p.action === 'toggleRegistration') {
+        const data = p.data || {}
+        const subjectId = data.subjectId
+        const newStatusBool = data.newStatus
+        const idx = subjects.value.findIndex(s => s.id === subjectId)
         if (idx > -1) {
-          subjects.value.splice(idx, 1)
-          toast.success(`Xóa môn học thành công`, `Môn học "${subjectData.name || subjectData.code}" đã được xóa`)
+          const statusStr = newStatusBool ? 'open' : 'closed'
+          try {
+            await updateCourseClass(subjectId, { status: statusStr })
+            subjects.value[idx].registrationOpen = newStatusBool
+            toast.success('Cập nhật trạng thái lớp thành công')
+          } catch (err) {
+            console.error('Toggle registration (confirm) failed', err)
+            toast.error(err.message || 'Không thể cập nhật trạng thái lớp')
+          }
         }
       }
       if (p.action === 'bulkDeleteSubjects') {
         const items = p.data || []
-        const idsToDelete = items.map(i => i.id)
-        subjects.value = subjects.value.filter(s => !idsToDelete.includes(s.id))
-        toast.success(`Xóa ${items.length} môn học thành công`, `${items.length} môn học đã được xóa`)
-        clearSelection()
+        if (!items.length) return
+        try {
+          const results = await Promise.allSettled(items.map(i => deleteCourseClass(i.id)))
+          const successes = results.filter(r => r.status === 'fulfilled').length
+          const failures = results.filter(r => r.status === 'rejected')
+          const deletedIds = items.filter((_, idx) => results[idx].status === 'fulfilled').map(it => it.id)
+          if (deletedIds.length) {
+            subjects.value = subjects.value.filter(s => !deletedIds.includes(s.id))
+          }
+          if (successes > 0) {
+            toast.success(`Xóa ${successes} lớp thành công`, `${successes} lớp đã được xóa`)
+          }
+          if (failures.length > 0) {
+            console.error('Some deletes failed', failures)
+            toast.error(`${failures.length} lớp xóa thất bại. Vui lòng kiểm tra.`)
+          }
+          clearSelection()
+        } catch (err) {
+          console.error('bulk delete failed', err)
+          toast.error(err.message || 'Xóa nhiều lớp thất bại')
+        }
       }
       confirmDialog.value.show = false
     }
@@ -688,10 +801,18 @@ export default {
       closeRegistrationModal()
     }
 
-    const toggleSubjectRegistration = (subject) => {
+    const toggleSubjectRegistration = async (subject) => {
+      // Show confirmation before toggling registration status
       const index = subjects.value.findIndex(s => s.id === subject.id)
-      if (index > -1) {
-        subjects.value[index].registrationOpen = !subjects.value[index].registrationOpen
+      if (index < 0) return
+      const newStatus = !subjects.value[index].registrationOpen
+      const statusLabel = newStatus ? 'mở đăng ký' : 'đóng đăng ký'
+      confirmDialog.value = {
+        show: true,
+        type: 'warning',
+        title: 'Xác nhận thay đổi trạng thái lớp',
+        message: `Bạn có chắc chắn muốn ${statusLabel} cho lớp "${subject.name || subject.code}"?`,
+        payload: { action: 'toggleRegistration', data: { subjectId: subject.id, newStatus } }
       }
     }
 
@@ -746,6 +867,7 @@ export default {
       viewingSubject,
       selectedSubjectForStudents,
       isEditMode,
+      modalServerErrors,
       
       // Filters
       filters,

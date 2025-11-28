@@ -28,7 +28,7 @@
                   :key="subject.id" 
                   :value="subject.id"
                 >
-                  {{ subject.code }} - {{ subject.name }} ({{ subject.teacherName }})
+                  {{ subject.code }} - {{ subject.name }}{{ subject.teacherName ? (' — ' + subject.teacherName) : '' }}
                 </option>
               </select>
             </div>
@@ -40,13 +40,7 @@
                   <strong>Học kỳ:</strong> {{ selectedSubject.semesterName }}
                 </div>
                 <div class="info-item">
-                  <strong>Giáo viên:</strong> {{ selectedSubject.teacherName }}
-                </div>
-                <div class="info-item">
                   <strong>Phòng học:</strong> {{ selectedSubject.roomName }}
-                </div>
-                <div class="info-item">
-                  <strong>Số SV:</strong> {{ selectedSubject.maxStudents }}
                 </div>
               </div>
             </div>
@@ -55,7 +49,7 @@
             <div class="form-group">
               <label class="required">Loại lịch</label>
               <select v-model="formData.scheduleType" required>
-                <option value="class">Lịch học</option>
+                <option value="study">Lịch học</option>
                 <option value="exam">Lịch thi</option>
               </select>
             </div>
@@ -245,14 +239,14 @@
                   <span>Hàng tuần</span>
                 </label>
                 <label class="radio-option">
-                  <input type="radio" v-model="formData.repeatType" value="custom" />
+                  <input type="radio" v-model="formData.repeatType" value="custom_weeks" />
                   <span>Tùy chỉnh</span>
                 </label>
               </div>
             </div>
 
             <!-- Custom Repeat Settings -->
-            <div v-if="formData.repeatType === 'custom'" class="form-group full-width">
+            <div v-if="formData.repeatType === 'custom_weeks'" class="form-group full-width">
               <label>Cài đặt lặp lại</label>
               <div class="custom-repeat">
                 <div class="repeat-row">
@@ -267,25 +261,6 @@
                   <span>tuần</span>
                 </div>
               </div>
-            </div>
-
-            <!-- Status -->
-            <div class="form-group">
-              <label class="required">Trạng thái</label>
-              <select v-model="formData.status" required>
-                <option value="scheduled">Đã xếp lịch</option>
-                <option value="draft">Nháp</option>
-              </select>
-            </div>
-
-            <!-- Notes -->
-            <div class="form-group full-width">
-              <label>Ghi chú</label>
-              <textarea
-                v-model="formData.notes"
-                placeholder="Ghi chú về lịch học (tùy chọn)"
-                rows="3"
-              ></textarea>
             </div>
           </div>
 
@@ -339,7 +314,7 @@ export default {
   setup(props, { emit }) {
     const formData = ref({
       subjectId: '',
-      scheduleType: 'class',
+      scheduleType: 'study',
       groupId: '',
       startDate: '',
       endDate: '',
@@ -391,6 +366,17 @@ export default {
         selectedSubject.value = subject
       }
     }
+
+    const selectedTeacherName = computed(() => {
+      if (selectedSubject.value && selectedSubject.value.teacherName) return selectedSubject.value.teacherName
+      // try to find teacher from props.teachers if teacherId present
+      const teacherId = selectedSubject.value?.teacherId || selectedSubject.value?.teacher_id
+      if (teacherId && Array.isArray(props.teachers)) {
+        const t = props.teachers.find(x => x.teacherId === teacherId || x.id === teacherId)
+        if (t) return t.name
+      }
+      return ''
+    })
 
     // Auto-select first day when days are selected
     watch(selectedDays, (newDays) => {
@@ -536,7 +522,10 @@ export default {
       const scheduleData = {
         ...formData.value,
         scheduleDays: scheduleDays.value,
-        type: formData.value.scheduleType
+        scheduleType: formData.value.scheduleType
+      }
+      if (scheduleData.repeatType === 'custom_weeks' && scheduleData.repeatInterval !== undefined) {
+        scheduleData.repeatWeeks = scheduleData.repeatInterval
       }
 
       // Add subject info
@@ -556,6 +545,13 @@ export default {
     }
 
     // Function to load schedule data
+    const apiDayToModalDay = (weekday) => {
+      // backend weekday 1..7 -> modal day values '2'..'8' (Mon=2, Sun=8)
+      const w = Number(weekday)
+      if (Number.isNaN(w)) return null
+      return String(w === 7 ? 8 : w + 1)
+    }
+
     const loadScheduleData = () => {
       if (props.schedule) {
         Object.keys(formData.value).forEach(key => {
@@ -563,18 +559,29 @@ export default {
             formData.value[key] = props.schedule[key]
           }
         })
+        // Support legacy fields on schedule objects (map 'class' -> 'study' for type)
+        if (!formData.value.scheduleType && props.schedule && props.schedule.type) {
+          formData.value.scheduleType = props.schedule.type === 'class' ? 'study' : props.schedule.type
+        } else if (!formData.value.scheduleType && props.schedule && props.schedule.schedule_type) {
+          formData.value.scheduleType = props.schedule.schedule_type === 'class' ? 'study' : props.schedule.schedule_type
+        }
+        // Map old repeatType keys or legacy values
+        if (!formData.value.repeatType && props.schedule) {
+          if (props.schedule.repeatType) formData.value.repeatType = props.schedule.repeatType === 'custom' ? 'custom_weeks' : props.schedule.repeatType
+          else if (props.schedule.repeat_type) formData.value.repeatType = props.schedule.repeat_type === 'custom' ? 'custom_weeks' : props.schedule.repeat_type
+        }
         
         if (props.schedule.scheduleDays && props.schedule.scheduleDays.length > 0) {
           scheduleDays.value = [...props.schedule.scheduleDays]
           
           // Rebuild selectedDays and dayScheduleData from scheduleDays
-          const uniqueDays = [...new Set(props.schedule.scheduleDays.map(s => s.dayOfWeek))]
+          const uniqueDays = [...new Set(props.schedule.scheduleDays.map(s => apiDayToModalDay(s.dayOfWeek || s.weekdayId || s.weekday_id || s.day)))]
           selectedDays.value = uniqueDays
           
           // Rebuild dayScheduleData
           const newDayScheduleData = {}
           props.schedule.scheduleDays.forEach(schedule => {
-            const day = schedule.dayOfWeek
+            const day = apiDayToModalDay(schedule.dayOfWeek || schedule.weekdayId || schedule.weekday_id || schedule.day)
             if (!newDayScheduleData[day]) {
               newDayScheduleData[day] = []
             }
@@ -589,6 +596,11 @@ export default {
           if (uniqueDays.length > 0) {
             currentEditingDay.value = uniqueDays[0]
           }
+          // set selectedSubject (for edit mode) using subjectId
+        if (formData.value.subjectId) {
+          const subj = props.subjects.find(s => s.id == formData.value.subjectId)
+          if (subj) selectedSubject.value = subj
+        }
         } else {
           scheduleDays.value = []
           selectedDays.value = []
@@ -599,7 +611,7 @@ export default {
         // Reset form for add mode
         formData.value = {
           subjectId: '',
-          scheduleType: 'class',
+          scheduleType: 'study',
           groupId: '',
           semesterId: '',
           startDate: '',
@@ -674,7 +686,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100000;
   padding: 20px;
 }
 

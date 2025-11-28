@@ -450,7 +450,7 @@ export default {
         const index = teachers.value.findIndex(t => t.id === editingTeacher.value.id)
         if (index > -1) {
           teachers.value[index] = { ...teacherToUpdate.value }
-          alert(`Đã cập nhật thông tin giảng viên ${teacherToUpdate.value.name}`)
+          toast.success(`Đã cập nhật thông tin giảng viên ${teacherToUpdate.value.name}`)
         }
       }
       closeTeacherModal()
@@ -680,6 +680,9 @@ export default {
       closeDeleteTeacherModal,
       confirmUpdateTeacher,
       closeUpdateTeacherModal,
+      // Local loading flags
+      deleting,
+      updating,
       
       // Helper Functions
       getDepartmentName,

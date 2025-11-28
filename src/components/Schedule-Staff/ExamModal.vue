@@ -481,6 +481,7 @@ export default {
 
       const examData = {
         ...formData.value,
+        scheduleType: 'exam',
         maxStudents: parseInt(formData.value.maxStudents),
         duration: parseInt(formData.value.duration),
         type: 'exam',
@@ -572,7 +573,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100000;
   padding: 20px;
 }
 

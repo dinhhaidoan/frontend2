@@ -37,7 +37,6 @@
             <th>Phòng học</th>
             <th>Tín chỉ</th>
             <th>Sinh viên</th>
-            <th>Trạng thái</th>
             <th>Đăng ký</th>
             <th class="actions-col">Thao tác</th>
           </tr>
@@ -101,16 +100,7 @@
                 ></div>
               </div>
             </td>
-            
-            <td class="status-col">
-              <span 
-                class="status-badge" 
-                :class="subject.status"
-              >
-                {{ getStatusLabel(subject.status) }}
-              </span>
-            </td>
-            
+          
             <td class="registration-col">
               <button 
                 @click="$emit('toggle:registration', subject)"
@@ -210,6 +200,10 @@ export default {
     selectedSubjects: {
       type: Array,
       default: () => []
+    },
+    semesters: {
+      type: Array,
+      default: () => []
     }
   },
   emits: [
@@ -255,12 +249,7 @@ export default {
     }
     
     const getSemesterName = (semesterId) => {
-      // This should be passed as a prop or accessed from a store
-      const semesters = [
-        { id: 1, name: 'Học kỳ I - 2024-2025' },
-        { id: 2, name: 'Học kỳ II - 2024-2025' }
-      ]
-      const semester = semesters.find(s => s.id === semesterId)
+      const semester = props.semesters.find(s => s.id === semesterId)
       return semester ? semester.name : 'Không xác định'
     }
     

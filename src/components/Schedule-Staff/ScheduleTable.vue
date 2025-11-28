@@ -48,10 +48,6 @@
               Phòng
               <i :class="getSortIcon('roomName')"></i>
             </th>
-            <th v-if="!isCompactView" @click="sort('status')" class="sortable">
-              Trạng thái
-              <i :class="getSortIcon('status')"></i>
-            </th>
             <th class="actions-col">Thao tác</th>
           </tr>
         </thead>
@@ -110,13 +106,6 @@
                 {{ schedule.roomName }}
               </div>
               <span v-else class="no-room">Chưa xếp phòng</span>
-            </td>
-
-            <!-- Status -->
-            <td v-if="!isCompactView" class="status-cell">
-              <span class="status-badge" :class="schedule.status">
-                {{ getStatusLabel(schedule.status) }}
-              </span>
             </td>
 
             <!-- Actions -->
@@ -190,14 +179,14 @@
       </button>
       
       <div class="page-info">
-        <span>{{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage * pageSize, schedules.length) }} / {{ schedules.length }}</span>
+        <span>{{ ((currentPage - 1) * pageSize + 1) }}-{{ Math.min(currentPage * pageSize, props.totalCount || props.schedules.length) }} / {{ props.totalCount || props.schedules.length }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 export default {
   name: 'ScheduleTable',
@@ -209,15 +198,35 @@ export default {
     loading: {
       type: Boolean,
       default: false
+    },
+    page: {
+      type: Number,
+      default: 1
+    },
+    limit: {
+      type: Number,
+      default: 20
+    },
+    totalCount: {
+      type: Number,
+      default: 0
     }
   },
-  emits: ['edit:schedule', 'delete:schedule', 'duplicate:schedule'],
-  setup(props) {
+  emits: ['edit:schedule', 'delete:schedule', 'duplicate:schedule', 'page:change'],
+  setup(props, { emit }) {
     const isCompactView = ref(false)
     const sortBy = ref('date')
     const sortOrder = ref('asc')
-    const currentPage = ref(1)
-    const pageSize = ref(20)
+    const currentPage = ref(props.page || 1)
+    const pageSize = ref(props.limit || 20)
+    
+    // Keep currentPage and pageSize in sync with props if parent changes
+    watch(() => props.page, (newVal) => {
+      if (newVal !== undefined) currentPage.value = newVal
+    })
+    watch(() => props.limit, (newVal) => {
+      if (newVal !== undefined) pageSize.value = newVal
+    })
 
     const sortedSchedules = computed(() => {
       const sorted = [...props.schedules].sort((a, b) => {
@@ -250,6 +259,7 @@ export default {
     })
 
     const totalPages = computed(() => {
+      if (props.totalCount && pageSize.value) return Math.ceil(props.totalCount / pageSize.value)
       return Math.ceil(props.schedules.length / pageSize.value)
     })
 
@@ -354,6 +364,8 @@ export default {
     const goToPage = (page) => {
       if (page >= 1 && page <= totalPages.value) {
         currentPage.value = page
+        // emit event for parent to fetch server-side data
+        emit('page:change', { page: currentPage.value, limit: pageSize.value })
       }
     }
 

@@ -83,6 +83,7 @@
         :subjects="subjects"
         :filters="filters"
         :loading="loading"
+        :semesters="semestersList"
         :view-mode="viewMode"
         @add-subject="openAddModal"
         @view-subject="viewSubject"

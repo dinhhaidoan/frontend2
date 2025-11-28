@@ -30,21 +30,11 @@
               </div>
               <div class="info-item">
                 <label>Số tín chỉ:</label>
-                <span class="credits-badge">{{ subject.credits }} TC</span>
-              </div>
-              <div class="info-item">
-                <label>Khoa/Bộ môn:</label>
-                <span>{{ subject.department }}</span>
+                <span class="credits-badge">{{ subject.credits }} Tín chỉ</span>
               </div>
               <div class="info-item">
                 <label>Học kỳ:</label>
                 <span class="semester-badge">{{ getSemesterName(subject.semesterId) }}</span>
-              </div>
-              <div class="info-item">
-                <label>Trạng thái:</label>
-                <span class="status-badge" :class="subject.status">
-                  {{ getStatusLabel(subject.status) }}
-                </span>
               </div>
             </div>
           </div>
@@ -119,24 +109,6 @@
               {{ subject.description }}
             </div>
           </div>
-          
-          <!-- Metadata -->
-          <div class="info-section">
-            <h4>
-              <i class="fas fa-calendar"></i>
-              Thông tin tạo
-            </h4>
-            <div class="info-grid">
-              <div class="info-item">
-                <label>Ngày tạo:</label>
-                <span>{{ formatDate(subject.createdAt) }}</span>
-              </div>
-              <div class="info-item">
-                <label>Lần cập nhật cuối:</label>
-                <span>{{ formatDate(subject.updatedAt || subject.createdAt) }}</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
       
@@ -157,6 +129,10 @@ export default {
     subject: {
       type: Object,
       required: true
+    },
+    semesters: {
+      type: Array,
+      default: () => []
     }
   },
   emits: ['close'],
@@ -166,12 +142,7 @@ export default {
     }
     
     const getSemesterName = (semesterId) => {
-      // This should be passed as a prop or accessed from a store
-      const semesters = [
-        { id: 1, name: 'Học kỳ I - 2024-2025' },
-        { id: 2, name: 'Học kỳ II - 2024-2025' }
-      ]
-      const semester = semesters.find(s => s.id === semesterId)
+      const semester = props.semesters.find(s => s.id === semesterId)
       return semester ? semester.name : 'Không xác định'
     }
     

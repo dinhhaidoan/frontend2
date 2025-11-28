@@ -61,24 +61,6 @@
             </div>
           </div>
 
-          <!-- Status & Notes -->
-          <div class="info-section">
-            <h4>Trạng thái & Ghi chú</h4>
-            <div class="info-grid">
-              <div class="info-item">
-                <label>Trạng thái:</label>
-                <span class="status-badge" :class="schedule.status">
-                  {{ getStatusLabel(schedule.status) }}
-                </span>
-              </div>
-              <div class="info-item full-width">
-                <label>{{ scheduleType === 'exam' ? 'Hướng dẫn thi:' : 'Ghi chú:' }}</label>
-                <p class="notes-text">
-                  {{ scheduleType === 'exam' ? schedule.instructions : schedule.notes || 'Không có ghi chú' }}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="modal-footer">
@@ -170,7 +152,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100000;
   padding: 20px;
 }
 

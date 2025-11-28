@@ -104,12 +104,14 @@
 
       <!-- List View -->
       <div v-if="activeTab === 'list'" class="schedule-view">
-        <ScheduleTable 
-          :schedules="filteredAllSchedules"
+        <WeeklyListView
+          :schedules="combinedListForListView"
+          :days="weekDaysForList"
+          :timeSlots="timeSlotsForList"
           :loading="loading"
           @edit:schedule="editSchedule"
           @delete:schedule="deleteSchedule"
-          @duplicate:schedule="duplicateSchedule"
+          @view:details="viewScheduleDetails"
         />
       </div>
     </div>
@@ -204,12 +206,19 @@ import WeeklyCalendar from '@/components/Schedule-Staff/WeeklyCalendar.vue'
 import ExamCalendar from '@/components/Schedule-Staff/ExamCalendar.vue'
 import MonthlyCalendar from '@/components/Schedule-Staff/MonthlyCalendar.vue'
 import ScheduleTable from '@/components/Schedule-Staff/ScheduleTable.vue'
+import WeeklyListView from '@/components/Schedule-Staff/WeeklyListView.vue'
 import ScheduleModal from '@/components/Schedule-Staff/ScheduleModal.vue'
 import ExamModal from '@/components/Schedule-Staff/ExamModal.vue'
 import ScheduleDetailsModal from '@/components/Schedule-Staff/ScheduleDetailsModal.vue'
 import ConflictCheckerModal from '@/components/Schedule-Staff/ConflictCheckerModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useSemesters } from '@/hooks/useSemesters'
+import { useCourseClasses } from '@/hooks/useCourseClasses'
+import { useTeachers } from '@/hooks/useTeachers'
+import shareService from '@/services/shareService'
+import useCourseSchedules from '@/hooks/useCourseSchedules'
+import { useToast } from '@/composables/useToast'
+import { mapCourseSchedule } from '@/types/courseSchedule'
 
 export default {
   name: 'Schedule',
@@ -220,10 +229,12 @@ export default {
     ExamCalendar,
     MonthlyCalendar,
     ScheduleTable,
+    WeeklyListView,
     ScheduleModal,
     ExamModal,
     ScheduleDetailsModal,
-    ConflictCheckerModal
+    ConflictCheckerModal,
+    ConfirmDialog
   },
   setup() {
     // State
@@ -231,10 +242,32 @@ export default {
     const activeTab = ref('class')
     const classSchedules = ref([])
     const examSchedules = ref([])
+    const { loading: scheduleLoading, schedules: hookSchedules, rawSchedules: hookRawSchedules, pagination, fetchCourseSchedules, fetchCourseSchedule, createCourseSchedule, updateCourseSchedule, deleteCourseSchedule } = useCourseSchedules()
     const subjects = ref([])
     const teachers = ref([])
     const rooms = ref([])
     const { semesters, fetchSemesters } = useSemesters()
+    const { courseClasses, fetchCourseClasses } = useCourseClasses()
+    const { teachers: hookTeachers, fetchTeachers } = useTeachers()
+
+    // Week days + times for the simple list view
+    const weekDaysForList = computed(() => ([
+      { dayOfWeek: 1, name: 'Thứ Hai' },
+      { dayOfWeek: 2, name: 'Thứ Ba' },
+      { dayOfWeek: 3, name: 'Thứ Tư' },
+      { dayOfWeek: 4, name: 'Thứ Năm' },
+      { dayOfWeek: 5, name: 'Thứ Sáu' },
+      { dayOfWeek: 6, name: 'Thứ Bảy' },
+      { dayOfWeek: 0, name: 'Chủ Nhật' }
+    ]))
+
+    const timeSlotsForList = computed(() => ([
+      { key: 1, label: '07:00–07:45', start: '07:00', end: '07:45' },
+      { key: 2, label: '07:50–08:35', start: '07:50', end: '08:35' },
+      { key: 3, label: '08:40–09:25', start: '08:40', end: '09:25' },
+      { key: 4, label: '09:35–10:20', start: '09:35', end: '10:20' },
+      { key: 5, label: '10:25–11:10', start: '10:25', end: '11:10' }
+    ]))
     
     // Modals
     const showScheduleModal = ref(false)
@@ -250,10 +283,10 @@ export default {
     const editingSchedule = ref(null)
     const editingExam = ref(null)
     const viewingSchedule = ref(null)
-    const viewingType = ref('class')
+    const viewingType = ref('study')
     const isEditMode = ref(false)
     const isExamEditMode = ref(false)
-    const scheduleType = ref('class')
+    const scheduleType = ref('study')
     const scheduleConflicts = ref([])
 
     // Filters
@@ -333,6 +366,49 @@ export default {
       ].sort((a, b) => new Date(a.date) - new Date(b.date))
     })
 
+    // Parents without scheduled occurrences — show as parent only items so that they are visible in list view
+    const parentsWithoutOccurrences = computed(() => {
+      const parents = hookRawSchedules.value || []
+      return parents.filter(p => {
+        const days = p.scheduleDays || p.CourseScheduleDays || []
+        return !Array.isArray(days) || days.length === 0
+      })
+    })
+
+    const parentOnlyEntriesForList = computed(() => {
+      return (parentsWithoutOccurrences.value || []).map(p => ({
+        id: `parent-${p.id || p.schedule_id}`,
+        parentId: p.id || p.schedule_id,
+        scheduleType: p.scheduleType || p.schedule_type || 'study',
+        subjectName: p.subjectName || p.subject_name || p.CourseClass?.subject_name || p.CourseClass?.name,
+        subjectCode: p.subjectCode || p.subject_code || p.CourseClass?.subject_code || '',
+        teacherName: p.teacherName || p.teacher_name || p.Teacher?.name || '',
+        roomName: p.roomName || p.room_name || p.Room?.name || '',
+        date: p.startDate || p.start_date || null,
+        isParentOnly: true,
+        rawParent: p
+      }))
+    })
+
+    const combinedListForListView = computed(() => {
+      // Combine flattened occurrences and any parent-only rows (no duplicates)
+      const occurrences = filteredAllSchedules.value || []
+      const parentEntries = parentOnlyEntriesForList.value || []
+      return [
+        ...occurrences,
+        ...parentEntries
+      ].sort((a, b) => {
+        const dateA = a.date || ''
+        const dateB = b.date || ''
+        if (dateA && dateB) return new Date(dateA) - new Date(dateB)
+        if (dateA && !dateB) return -1
+        if (!dateA && dateB) return 1
+        return 0
+      })
+    })
+
+    const { success, error } = useToast()
+
     // Methods
     const filterSchedules = (schedules) => {
       let result = schedules
@@ -363,7 +439,9 @@ export default {
       }
 
       if (filters.value.dayOfWeek) {
-        result = result.filter(schedule => schedule.dayOfWeek === parseInt(filters.value.dayOfWeek))
+        const requested = parseInt(filters.value.dayOfWeek)
+        const mappedDay = requested === 7 ? 0 : requested
+        result = result.filter(schedule => schedule.dayOfWeek === mappedDay)
       }
 
       if (filters.value.timeSlot) {
@@ -377,18 +455,42 @@ export default {
       return result
     }
 
+    const reloadAllSchedules = async () => {
+      try {
+        const studyRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
+        const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
+        const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
+        const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
+        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
+        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam')
+        try {
+          console.debug('reloadAllSchedules: hookRawSchedules', { rawCount: hookRawSchedules.value.length, sampleRaw: hookRawSchedules.value.slice(0,3) })
+        } catch (e) {}
+        try {
+          console.debug('reloadAllSchedules: hookSchedules (flattened)', { hookCount: hookSchedules.value.length, sampleHook: hookSchedules.value.slice(0,5) })
+        } catch (e) {}
+        try {
+          console.debug('reloadAllSchedules: local class & exam counts', { classCount: classSchedules.value.length, examCount: examSchedules.value.length, sampleClass: classSchedules.value.slice(0,5), sampleExam: examSchedules.value.slice(0,5) })
+        } catch (e) {}
+        try { console.debug('reloadAllSchedules: reloaded', { study: classSchedules.value.length, exam: examSchedules.value.length }) } catch (e) {}
+      } catch (err) {
+        console.error('Failed to reload all schedules:', err)
+      }
+    }
+
     const loadData = async () => {
       loading.value = true
       try {
         await Promise.all([
-          loadClassSchedules(),
-          loadExamSchedules(),
+          reloadAllSchedules(),
           loadSubjects(),
           loadTeachers(),
           loadRooms(),
           loadSemesters()
         ])
         await checkConflicts()
+        // debug: show loaded counts
+        try { console.debug('loadData: loaded schedules', { classCount: classSchedules.value.length, examCount: examSchedules.value.length }) } catch (e) {}
       } catch (error) {
         console.error('Lỗi khi tải dữ liệu:', error)
       } finally {
@@ -397,120 +499,86 @@ export default {
     }
 
     const loadClassSchedules = async () => {
-      // Mock data
-      classSchedules.value = [
-        {
-          id: 1,
-          subjectId: 1,
-          subjectName: 'Lập trình cơ bản',
-          subjectCode: 'CS101-01',
-          teacherId: 1,
-          teacherName: 'Nguyễn Văn A',
-          roomId: 1,
-          roomName: 'P301',
-          semesterId: 1,
-          dayOfWeek: 2, // Monday = 1, Tuesday = 2, etc.
-          timeSlot: '7:00-9:00',
-          startTime: '07:00',
-          endTime: '09:00',
-          date: '2024-01-15',
-          duration: 120,
-          status: 'scheduled',
-          notes: 'Lớp lý thuyết',
-          createdAt: '2024-01-10'
-        },
-        {
-          id: 2,
-          subjectId: 1,
-          subjectName: 'Lập trình cơ bản',
-          subjectCode: 'CS101-01',
-          teacherId: 1,
-          teacherName: 'Nguyễn Văn A',
-          roomId: 2,
-          roomName: 'LAB1',
-          semesterId: 1,
-          dayOfWeek: 4,
-          timeSlot: '13:00-15:00',
-          startTime: '13:00',
-          endTime: '15:00',
-          date: '2024-01-17',
-          duration: 120,
-          status: 'scheduled',
-          notes: 'Lớp thực hành',
-          createdAt: '2024-01-10'
-        }
-      ]
+      try {
+        // fetch for study schedules and use the returned value instead of relying on hookSchedules
+        const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
+        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
+        // ensure we only assign schedules with type study
+        classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
+        // debug: log when we load
+        if (!classSchedules.value.length) console.debug('loadClassSchedules: no study schedules loaded')
+      } catch (err) {
+        console.error('Failed to load class schedules:', err)
+      }
     }
 
     const loadExamSchedules = async () => {
-      // Mock data
-      examSchedules.value = [
-        {
-          id: 1,
-          subjectId: 1,
-          subjectName: 'Lập trình cơ bản',
-          subjectCode: 'CS101',
-          teacherId: 1,
-          teacherName: 'Nguyễn Văn A',
-          roomId: 1,
-          roomName: 'P301',
-          semesterId: 1,
-          examType: 'midterm',
-          examTypeName: 'Giữa kỳ',
-          date: '2024-02-15',
-          startTime: '07:00',
-          endTime: '09:00',
-          duration: 120,
-          maxStudents: 40,
-          registeredStudents: 35,
-          status: 'scheduled',
-          instructions: 'Sinh viên cần mang theo CMND và thẻ SV',
-          createdAt: '2024-01-20'
-        },
-        {
-          id: 2,
-          subjectId: 2,
-          subjectName: 'Cấu trúc dữ liệu',
-          subjectCode: 'CS102',
-          teacherId: 2,
-          teacherName: 'Trần Thị B',
-          roomId: 2,
-          roomName: 'P302',
-          semesterId: 1,
-          examType: 'final',
-          examTypeName: 'Cuối kỳ',
-          date: '2024-03-20',
-          startTime: '09:00',
-          endTime: '11:00',
-          duration: 120,
-          maxStudents: 45,
-          registeredStudents: 42,
-          status: 'scheduled',
-          instructions: 'Thi trắc nghiệm trên máy tính',
-          createdAt: '2024-02-01'
-        }
-      ]
+      try {
+        const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
+        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
+        examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam')
+        if (!examSchedules.value.length) console.debug('loadExamSchedules: no exam schedules loaded')
+      } catch (err) {
+        console.error('Failed to load exam schedules:', err)
+      }
     }
 
     const loadSubjects = async () => {
-      subjects.value = [
-        { id: 1, name: 'Lập trình cơ bản', code: 'CS101' },
-        { id: 2, name: 'Cấu trúc dữ liệu', code: 'CS102' }
-      ]
+      try {
+        await fetchCourseClasses({ page: 1, limit: 500 })
+        // Ensure we have semesters and teachers
+        await fetchSemesters()
+        await fetchTeachers({ page: 1, limit: 500 })
+        // Map to subject shape expected by modal and provide semester/teacher names
+        const semesterMap = (semesters.value || []).reduce((acc, s) => { acc[s.id || s.semester_id] = s; return acc }, {})
+        const teacherMap = (hookTeachers.value || []).reduce((acc, t) => { acc[t.id] = t; if (t.teacherId) acc[t.teacherId] = t; return acc }, {})
+
+        subjects.value = (courseClasses.value || []).map(c => {
+          const semesterId = c.semesterId || c.semester || c.semester_id
+          const semester = semesterMap[semesterId]
+          const teacherId = c.teacherId || c.teacher_id || c.teacherId
+          const teacher = teacherMap[teacherId]
+          return {
+            id: c.id,
+            name: c.name,
+            code: c.code,
+            teacherId: teacherId || null,
+            teacherName: c.teacherName || (teacher ? teacher.name : ''),
+            roomName: c.roomName || c.room || '',
+            semesterId: semesterId || null,
+            semesterName: semester ? (semester.name || semester.semester_name || semester.label) : ''
+            ,
+            maxStudents: c.maxStudents || c.capacity || 0
+          }
+        })
+      } catch (err) {
+        console.error('Failed to load course classes for subjects', err)
+        subjects.value = []
+      }
     }
 
     const loadTeachers = async () => {
-      teachers.value = [
-        { id: 1, name: 'Nguyễn Văn A', email: 'nguyenvana@email.com' },
-        { id: 2, name: 'Trần Thị B', email: 'tranthib@email.com' }
-      ]
+      try {
+        await fetchTeachers({ page: 1, limit: 500 })
+        teachers.value = (hookTeachers.value || []).map(t => ({ id: t.id, teacherId: t.teacherId || t.teacher?.teacher_id || t.teacher?.teacher_id, name: t.name, email: t.email }))
+      } catch (err) {
+        console.error('Failed to load teachers:', err)
+        teachers.value = []
+      }
     }
 
     const loadRooms = async () => {
-      rooms.value = [
-        { id: 1, name: 'P301', building: 'Tòa A', capacity: 50 },
-        { id: 2, name: 'LAB1', building: 'Tòa B', capacity: 30 }
-      ]
+      try {
+        const res = await shareService.listRooms({ limit: 500, page: 1 })
+        let rows = []
+        if (Array.isArray(res)) rows = res
+        else if (Array.isArray(res.data)) rows = res.data
+        else if (Array.isArray(res.rows)) rows = res.rows
+        rooms.value = (rows || []).map(r => ({ id: r.room_id || r.id, name: r.room_name || r.name, building: r.building || r.base_building, capacity: r.capacity || r.room_capacity || 0 }))
+      } catch (err) {
+        console.error('Failed to load rooms from backend', err)
+        rooms.value = []
+      }
     }
 
     const loadSemesters = async () => {
@@ -549,7 +617,7 @@ export default {
     const openScheduleModal = () => {
       editingSchedule.value = null
       isEditMode.value = false
-      scheduleType.value = activeTab.value === 'exam' ? 'exam' : 'class'
+      scheduleType.value = activeTab.value === 'exam' ? 'exam' : 'study'
       if (scheduleType.value === 'exam') {
         showExamModal.value = true
       } else {
@@ -557,16 +625,30 @@ export default {
       }
     }
 
-    const editSchedule = (schedule) => {
-      editingSchedule.value = { ...schedule }
-      isEditMode.value = true
-      showScheduleModal.value = true
+    const editSchedule = async (schedule) => {
+      try {
+        isEditMode.value = true
+        const parentId = schedule.scheduleId || schedule.parentId || schedule.id
+        const res = await fetchCourseSchedule(parentId)
+        editingSchedule.value = res // mapped parent schedule
+        showScheduleModal.value = true
+      } catch (err) {
+        console.error('Failed to fetch schedule for edit', err)
+        error('Không thể tải chi tiết lịch để sửa. Vui lòng thử lại.')
+      }
     }
 
-    const editExam = (exam) => {
-      editingExam.value = { ...exam }
-      isExamEditMode.value = true
-      showExamModal.value = true
+    const editExam = async (exam) => {
+      try {
+        isExamEditMode.value = true
+        const parentId = exam.scheduleId || exam.parentId || exam.id
+        const res = await fetchCourseSchedule(parentId)
+        editingExam.value = res
+        showExamModal.value = true
+      } catch (err) {
+        console.error('Failed to fetch exam for edit', err)
+        error('Không thể tải chi tiết lịch thi để sửa. Vui lòng thử lại.')
+      }
     }
 
     const deleteSchedule = (schedule) => {
@@ -579,26 +661,55 @@ export default {
       scheduleToDelete.value = null
     }
 
-    const confirmDeleteSchedule = () => {
+    const confirmDeleteSchedule = async () => {
       if (!scheduleToDelete.value) return
-      
-      const type = scheduleToDelete.value.type || (scheduleToDelete.value.examType ? 'exam' : 'class')
-      const name = scheduleToDelete.value.subjectName
-      
-      if (type === 'exam') {
-        const index = examSchedules.value.findIndex(s => s.id === scheduleToDelete.value.id)
-        if (index > -1) examSchedules.value.splice(index, 1)
-      } else {
-        const index = classSchedules.value.findIndex(s => s.id === scheduleToDelete.value.id)
-        if (index > -1) classSchedules.value.splice(index, 1)
+      try {
+        const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
+        await deleteCourseSchedule(parentId)
+        const type = scheduleToDelete.value.type || (scheduleToDelete.value.examType ? 'exam' : 'class')
+        if (type === 'exam') {
+          // remove all occurrences with parentId
+          const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
+          examSchedules.value = examSchedules.value.filter(s => s.scheduleId !== parentId)
+        } else {
+          const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
+          classSchedules.value = classSchedules.value.filter(s => s.scheduleId !== parentId)
+        }
+        // refresh lists and use the returned arrays (avoid relying on hookSchedules which is overwritten by parallel calls)
+        const studyRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
+        const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
+        const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
+        const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
+        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
+        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam')
+        success(`Đã xóa lịch thành công.`)
+        closeDeleteScheduleModal()
+      } catch (err) {
+        console.error('Failed to delete schedule', err)
+        if (err?.details) {
+          error('Lỗi khi xóa lịch: ' + (err.details.message || JSON.stringify(err.details)))
+        } else {
+          error(err.message || 'Lỗi khi xóa lịch')
+        }
       }
-      
-      alert(`Đã xóa ${type === 'exam' ? 'lịch thi' : 'lịch học'} "${name}" thành công`)
-      closeDeleteScheduleModal()
     }
 
     const deleteExam = (exam) => {
       deleteSchedule({ ...exam, type: 'exam' })
+    }
+
+    const handleTablePageChange = async ({ page, limit }) => {
+      try {
+        const params = { page, limit, schedule_type: activeTab.value === 'exam' ? 'exam' : 'study' }
+        if (filters.value.search) params.q = filters.value.search
+        const res = await fetchCourseSchedules(params)
+          // If fetch returned an array, split it accordingly; otherwise fallback to hookSchedules
+          const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
+          classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
+          examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam')
+      } catch (err) {
+        console.error('Failed to fetch page of schedules', err)
+      }
     }
 
     const duplicateSchedule = (schedule) => {
@@ -621,20 +732,31 @@ export default {
       }
     }
 
-    const saveSchedule = (scheduleData) => {
-      if (isEditMode.value) {
-        // Show update confirmation modal
-        scheduleToUpdate.value = scheduleData
-        updateScheduleModalVisible.value = true
-      } else {
-        const newSchedule = {
-          ...scheduleData,
-          id: Date.now(),
-          createdAt: new Date().toISOString().split('T')[0]
+    const saveSchedule = async (scheduleData) => {
+      try {
+        if (isEditMode.value && editingSchedule.value && editingSchedule.value.id) {
+          // update
+          await updateCourseSchedule(editingSchedule.value.id, scheduleData)
+          await reloadAllSchedules()
+          closeUpdateScheduleModal()
+          closeScheduleModal()
+          checkConflicts()
+          success('Đã cập nhật lịch học thành công')
+        } else {
+          // create
+          await createCourseSchedule(scheduleData)
+          await reloadAllSchedules()
+          closeScheduleModal()
+          checkConflicts()
+          success('Đã tạo lịch học thành công')
         }
-        classSchedules.value.push(newSchedule)
-        closeScheduleModal()
-        checkConflicts()
+      } catch (err) {
+        console.error('Failed to save schedule:', err)
+        if (err?.details) {
+          error('Lỗi khi lưu lịch: ' + (err.details.message || JSON.stringify(err.details)))
+        } else {
+          error(err.message || 'Có lỗi xảy ra khi lưu lịch.')
+        }
       }
     }
 
@@ -653,23 +775,32 @@ export default {
       closeUpdateScheduleModal()
       closeScheduleModal()
       checkConflicts()
-      alert('Đã cập nhật lịch học thành công')
+      success('Đã cập nhật lịch học thành công')
     }
 
-    const saveExam = (examData) => {
-      if (isExamEditMode.value) {
-        // Show update confirmation modal
-        examToUpdate.value = examData
-        updateExamModalVisible.value = true
-      } else {
-        const newExam = {
-          ...examData,
-          id: Date.now(),
-          createdAt: new Date().toISOString().split('T')[0]
+    const saveExam = async (examData) => {
+      try {
+        if (isExamEditMode.value && editingExam.value && editingExam.value.id) {
+          await updateCourseSchedule(editingExam.value.id, examData)
+          await reloadAllSchedules()
+          closeUpdateExamModal()
+          closeExamModal()
+          checkConflicts()
+          success('Đã cập nhật lịch thi thành công')
+        } else {
+          await createCourseSchedule(examData)
+          await reloadAllSchedules()
+          closeExamModal()
+          checkConflicts()
+          success('Đã tạo lịch thi thành công')
         }
-        examSchedules.value.push(newExam)
-        closeExamModal()
-        checkConflicts()
+      } catch (err) {
+        console.error('Failed to save exam:', err)
+        if (err?.details) {
+          error('Lỗi khi lưu lịch thi: ' + (err.details.message || JSON.stringify(err.details)))
+        } else {
+          error(err.message || 'Có lỗi xảy ra khi lưu lịch thi.')
+        }
       }
     }
 
@@ -688,7 +819,7 @@ export default {
       closeUpdateExamModal()
       closeExamModal()
       checkConflicts()
-      alert('Đã cập nhật lịch thi thành công')
+      success('Đã cập nhật lịch thi thành công')
     }
 
     const closeScheduleModal = () => {
@@ -701,16 +832,43 @@ export default {
       editingExam.value = null
     }
 
-    const viewScheduleDetails = (schedule) => {
-      viewingSchedule.value = schedule
-      viewingType.value = schedule.examType ? 'exam' : 'class'
-      showDetailsModal.value = true
+    const viewScheduleDetails = async (schedule) => {
+      try {
+        const parentId = schedule.scheduleId || schedule.parentId || schedule.id
+        const res = await fetchCourseSchedule(parentId)
+        // merge occurrence-specific data into the parent schedule object for display
+        viewingSchedule.value = {
+          ...res,
+          date: schedule.date || res.startDate || res.start_date,
+          startTime: schedule.startTime || res.startTime,
+          endTime: schedule.endTime || res.endTime,
+          slotNumber: schedule.slotNumber || null
+        }
+        viewingType.value = res.scheduleType || res.schedule_type || (schedule.examType ? 'exam' : 'class')
+        showDetailsModal.value = true
+      } catch (err) {
+        console.error('Failed to fetch schedule details', err)
+        error('Không thể tải chi tiết lịch.')
+      }
     }
 
-    const viewExamDetails = (exam) => {
-      viewingSchedule.value = exam
-      viewingType.value = 'exam'
-      showDetailsModal.value = true
+    const viewExamDetails = async (exam) => {
+      try {
+        const parentId = exam.scheduleId || exam.parentId || exam.id
+        const res = await fetchCourseSchedule(parentId)
+        viewingSchedule.value = {
+          ...res,
+          date: exam.date || res.startDate || res.start_date,
+          startTime: exam.startTime || res.startTime,
+          endTime: exam.endTime || res.endTime,
+          slotNumber: exam.slotNumber || null
+        }
+        viewingType.value = 'exam'
+        showDetailsModal.value = true
+      } catch (err) {
+        console.error('Failed to fetch exam details', err)
+        error('Không thể tải chi tiết lịch thi')
+      }
     }
 
     const closeDetailsModal = () => {
@@ -747,6 +905,9 @@ export default {
       console.log('Xuất lịch học/thi')
     }
 
+    // computed combined loading
+    const isLoading = computed(() => loading.value || scheduleLoading.value)
+
     // Lifecycle
     onMounted(() => {
       loadData()
@@ -754,7 +915,7 @@ export default {
 
     return {
       // State
-      loading,
+      loading: isLoading,
       activeTab,
       classSchedules,
       examSchedules,
@@ -794,6 +955,8 @@ export default {
       filteredAllSchedules,
       
       // Methods
+      weekDaysForList,
+      timeSlotsForList,
       updateFilters,
       resetFilters,
       openScheduleModal,

@@ -33,16 +33,33 @@
               </select>
             </div>
             
-            <!-- Subject Code -->
+            <!-- Subject Code / SKU Preview & Suffix -->
             <div class="form-group">
-              <label class="required">Mã môn học</label>
-              <input
-                type="text"
-                v-model="formData.code"
-                required
-                placeholder="VD: CS101-01"
-              />
-              <small>Mã môn sẽ được tạo tự động dựa trên môn gốc</small>
+              <label class="required">Mã lớp (Preview SKU)</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input
+                  type="text"
+                  :value="skuPreview"
+                  readonly
+                  placeholder="VD: CS101-01"
+                />
+                <input
+                  type="text"
+                  v-model="formData.classSuffix"
+                  maxlength="2"
+                  placeholder="01"
+                  title="Suffix 2 chữ số (tùy chọn). Nếu bỏ trống server sẽ cấp tự động"
+                  style="width:72px"
+                />
+              </div>
+              <small>Server sẽ cấp mã lớp thực tế. Bạn có thể nhập suffix (2 chữ số) để gợi ý mã, hoặc để trống để server tự cấp.</small>
+              <div v-if="serverErrors && (serverErrors.course_class_SKU || serverErrors.course_class_suffix || serverErrors.sku || serverErrors.suffix || serverErrors.non_field_errors)" class="field-error">
+                <small v-if="serverErrors.non_field_errors && serverErrors.non_field_errors.length" class="error-text">{{ serverErrors.non_field_errors[0] }}</small>
+                <small v-else-if="serverErrors.course_class_SKU" class="error-text">{{ serverErrors.course_class_SKU[0] }}</small>
+                <small v-else-if="serverErrors.course_class_suffix" class="error-text">{{ serverErrors.course_class_suffix[0] }}</small>
+                <small v-else-if="serverErrors.sku" class="error-text">{{ serverErrors.sku[0] }}</small>
+                <small v-else-if="serverErrors.suffix" class="error-text">{{ serverErrors.suffix[0] }}</small>
+              </div>
             </div>
             
             <!-- Subject Name -->
@@ -79,7 +96,7 @@
                 <option 
                   v-for="teacher in teachers" 
                   :key="teacher.id" 
-                  :value="teacher.id"
+                  :value="teacher.teacher_id"
                 >
                   {{ teacher.name }} - {{ teacher.specialization }}
                 </option>
@@ -87,7 +104,7 @@
             </div>
             
             <!-- Room -->
-            <div class="form-group full-width">
+            <div v-if="!isEdit" class="form-group full-width">
               <label>Phòng học</label>
               <div class="room-selection">
                 <!-- Base / Floor Selector -->
@@ -123,7 +140,7 @@
 
                 <!-- Room Select -->
                 <div class="room-select" v-if="fetchedRooms.length">
-                  <select v-model="formData.roomId">
+                  <select v-model="formData.roomId" @change="handleRoomChange">
                     <option value="">-- Chọn phòng học --</option>
                     <option v-for="room in fetchedRooms" :key="room.room_id || room.id" :value="room.room_id || room.id">
                       {{ roomLabel(room) }}
@@ -160,17 +177,6 @@
                 required
               />
             </div>
-            
-            <!-- Status -->
-            <div class="form-group">
-              <label>Trạng thái</label>
-              <select v-model="formData.status">
-                <option value="active">Hoạt động</option>
-                <option value="inactive">Không hoạt động</option>
-                <option value="pending">Chờ duyệt</option>
-              </select>
-            </div>
-            
             <!-- Registration Open -->
              <div class="form-group">
               <label class="required">Trạng thái lớp học</label>
@@ -181,7 +187,7 @@
               >
                 <option value="open">🟢 Mở đăng ký</option>
                 <option value="teaching">🔵 Đang dạy</option>
-                <option value="finished">🔴 Đã kết thúc</option>
+                <option value="closed">🔴 Đã kết thúc</option>
               </select>
             </div>
             
@@ -243,16 +249,24 @@ export default {
       type: Boolean,
       default: false
     }
+    ,
+    serverErrors: {
+      type: Object,
+      default: () => ({})
+    }
   },
   emits: ['close', 'save'],
   setup(props, { emit }) {
     const formData = ref({
       frameworkSubjectId: '',
-      code: '',
+      classSuffix: '',
+      code: '', // legacy preview field, but we use skuPreview computed
       name: '',
       semesterId: '',
       teacherId: '',
       roomId: '',
+      baseId: null,
+      floorId: null,
       credits: 0,
       maxStudents: 40,
       status: 'active',
@@ -302,9 +316,17 @@ export default {
       return `${baseName}${floorName ? ' -> ' + floorName : ''}${roomName ? ' - Phòng ' + roomName : ''}`
     }
 
+    const skuPreview = computed(() => {
+      const fw = props.frameworkSubjects.find(s => s.id == formData.value.frameworkSubjectId)
+      if (!fw) return ''
+      // Use code field which we mapped from sku
+      const sku = fw.code || fw.sku || fw.course_SKU || '---'
+      const suffix = formData.value.classSuffix ? String(formData.value.classSuffix).padStart(2, '0') : '--'
+      return `${sku}-${suffix}`
+    })
+
     const isFormValid = computed(() => {
       return formData.value.frameworkSubjectId &&
-             formData.value.code &&
              formData.value.name &&
              formData.value.semesterId &&
              formData.value.maxStudents > 0
@@ -312,15 +334,58 @@ export default {
     
     const initializeForm = () => {
       if (props.subject) {
+        // start from subject (may be already mapped via mapCourseClass)
         formData.value = { ...props.subject }
+        const raw = (props.subject && props.subject.raw) ? props.subject.raw : {}
+        console.debug('SubjectModal.initializeForm', { subject: props.subject, raw, baseId: formData.value.baseId, floorId: formData.value.floorId, roomId: formData.value.roomId })
+
+        // Map framework / course id (frameworkSubjectId) from several possible keys
+        formData.value.frameworkSubjectId = formData.value.frameworkSubjectId || props.subject.courseId || props.subject.course_id || raw.course_id || (raw.Course && (raw.Course.course_id || raw.Course.id)) || ''
+
+        // Ensure name, credits and maxStudents are populated from course/courseClass data
+        formData.value.name = formData.value.name || props.subject.name || props.subject.courseName || props.subject.course_name || raw.course_name || (raw.Course && (raw.Course.course_name_vn || raw.Course.name)) || ''
+        formData.value.credits = Number(formData.value.credits || props.subject.credits || raw.credits || (raw.Course && raw.Course.credits) || 0)
+        formData.value.maxStudents = Number(formData.value.maxStudents || props.subject.maxStudents || props.subject.capacity || props.subject.course_capacity || raw.capacity || raw.maxStudents || 40)
+
+        // Status / classStatus mapping (backend may use status/class_status/registrationOpen)
+        formData.value.status = formData.value.status || props.subject.status || props.subject.classStatus || raw.status || raw.class_status || 'active'
+        formData.value.classStatus = formData.value.classStatus || props.subject.classStatus || (props.subject.registrationOpen ? 'open' : (formData.value.status || 'open'))
+
+        // set base and floor selection from existing room/base info (check raw if not present on mapped object)
+        formData.value.baseId = formData.value.baseId || props.subject.base_id || props.subject.baseId || props.subject.base || raw.base_id || raw.baseId || null
+        formData.value.floorId = formData.value.floorId || props.subject.floor_id || props.subject.floorId || props.subject.floor || raw.floor_id || raw.floorId || null
+        formData.value.roomId = formData.value.roomId || props.subject.room_id || props.subject.room || props.subject.roomId || raw.room_id || raw.roomId || null
+        // Populate selectedBase and selectedFloor for UI when editing
+        if (formData.value.baseId && bases.value && bases.value.length) {
+          const baseObj = bases.value.find(b => (b.base_id || b.id) == formData.value.baseId)
+          if (baseObj) selectedBase.value = baseObj.base_code || baseObj.baseCode || baseObj.code
+        }
+        if (formData.value.floorId && selectedBase.value) {
+          const floorList = floorsByBase[selectedBase.value] || []
+          const floorObj = floorList.find(f => (f.floor_id || f.id) == formData.value.floorId)
+          if (floorObj) selectedFloor.value = floorObj.floor_number || floorObj.floorNumber || floorObj.number
+        }
+        // handle classSuffix / suffix mapping if returned by backend
+        if (props.subject.course_class_suffix !== undefined && props.subject.course_class_suffix !== null) {
+          formData.value.classSuffix = String(props.subject.course_class_suffix).padStart(2, '0')
+        } else if (props.subject.suffix !== undefined && props.subject.suffix !== null) {
+          formData.value.classSuffix = String(props.subject.suffix).padStart(2, '0')
+        } else if (props.subject.code) {
+          const parts = String(props.subject.code).split('-')
+          if (parts.length > 1) {
+            const s = parts[parts.length - 1]
+            if (!Number.isNaN(parseInt(s, 10))) formData.value.classSuffix = String(s).padStart(2, '0')
+          }
+        }
         if (!formData.value.classStatus) {
             // Nếu đang mở đăng ký -> open, ngược lại coi như đã kết thúc hoặc đang dạy tùy logic cũ của bạn
-            formData.value.classStatus = props.subject.registrationOpen ? 'open' : 'finished'
+            formData.value.classStatus = props.subject.registrationOpen ? 'open' : 'closed'
         }
       } else {
         formData.value = {
           frameworkSubjectId: '',
-          code: '',
+          classSuffix: '',
+          code: '', // legacy preview field, but we use skuPreview computed
           name: '',
           semesterId: '',
           teacherId: '',
@@ -342,19 +407,13 @@ export default {
       )
       
       if (selectedSubject) {
-        // Generate unique code
-        const baseCode = selectedSubject.code
-        const existingCodes = [] // This should come from existing subjects
-        let counter = 1
-        let newCode = `${baseCode}-${counter.toString().padStart(2, '0')}`
-        
-        while (existingCodes.includes(newCode)) {
-          counter++
-          newCode = `${baseCode}-${counter.toString().padStart(2, '0')}`
-        }
-        
-        formData.value.code = newCode
+        // For server-generated SKU: clear previewed suffix
+        formData.value.classSuffix = ''
         formData.value.name = selectedSubject.name
+        // auto-fill semester if course has one
+        if (selectedSubject.semester_id || selectedSubject.semesterId || selectedSubject.semester) {
+          formData.value.semesterId = selectedSubject.semester_id || selectedSubject.semesterId || selectedSubject.semester
+        }
         formData.value.credits = selectedSubject.credits
         formData.value.description = selectedSubject.description
         formData.value.department = selectedSubject.department
@@ -457,7 +516,21 @@ export default {
         selectedFloor.value = null
         fetchedRooms.value = []
         try {
+          console.debug('SubjectModal.selectedBase changed, fetching floors for', base)
           await fetchFloorsByBaseCode(base)
+          console.debug('floorsByBase after fetch', JSON.parse(JSON.stringify(floorsByBase)))
+          // set the baseId into formData if available
+          const selectedBaseObj = bases.value.find(b => (b.base_code || b.baseCode) === base || (b.base_code === base))
+          if (selectedBaseObj) formData.value.baseId = selectedBaseObj.base_id || selectedBaseObj.id
+          // If we are editing and have a floorId already, attempt to set selectedFloor
+          if (formData.value.floorId) {
+            const fls = floorsByBase[base] || []
+            const floorObj = fls.find(f => (f.floor_id || f.id) == formData.value.floorId)
+            if (floorObj) {
+              selectedFloor.value = floorObj.floor_number || floorObj.floorNumber || floorObj.number
+              // setting selectedFloor will trigger its watcher to fetch rooms
+            }
+          }
         } catch (e) {
           console.debug('fetch floors failed', e)
         }
@@ -466,14 +539,31 @@ export default {
 
     watch(selectedFloor, async (fl) => {
       if (!fl || !selectedBase.value) return
+      console.debug('SubjectModal.selectedFloor changed', { selectedBase: selectedBase.value, selectedFloor: fl, formFloorId: formData.value.floorId })
       try {
         const r = await fetchRoomsByBaseAndFloor(selectedBase.value, fl)
         fetchedRooms.value = Array.isArray(r) ? r : (r.rooms || [])
+        // set the floorId to the object if available
+        const floorList = floorsByBase[selectedBase.value] || []
+        const floorObj = floorList.find(f => Number(f.floor_number) === Number(fl))
+        if (floorObj) formData.value.floorId = floorObj.floor_id || floorObj.id
+        console.debug('Rooms fetched for floor', { floorObj, rooms: fetchedRooms.value })
       } catch (e) {
         console.debug('fetch rooms failed', e)
         fetchedRooms.value = []
       }
     })
+
+    const handleRoomChange = (ev) => {
+      const val = ev.target.value
+      formData.value.roomId = val
+      // find selected room
+      const rm = fetchedRooms.value.find(r => String(r.room_id || r.id) === String(val))
+      if (rm) {
+        formData.value.baseId = rm.base_id || rm.baseId || formData.value.baseId
+        formData.value.floorId = rm.floor_id || rm.floorId || formData.value.floorId
+      }
+    }
 
     const handleSubmit = () => {
       if (!isFormValid.value) return
@@ -488,12 +578,12 @@ export default {
       
       // Add teacher name and room name for display
       if (formData.value.teacherId) {
-        const teacher = props.teachers.find(t => t.id == formData.value.teacherId)
+        const teacher = props.teachers.find(t => t.teacher_id == formData.value.teacherId)
         formData.value.teacherName = teacher ? teacher.name : ''
       }
       
       if (formData.value.roomId) {
-        const room = props.rooms.find(r => r.id == formData.value.roomId)
+        const room = props.rooms.find(r => String(r.id) === String(formData.value.roomId)) || fetchedRooms.value.find(r => String(r.room_id || r.id) === String(formData.value.roomId))
         formData.value.roomName = room ? room.name : ''
       }
       
@@ -517,7 +607,26 @@ export default {
         console.debug('fetch bases failed', e)
       }
     })
+
+    // When bases load, if in edit mode, set selectedBase & selected floor
+    watch(bases, (newBases) => {
+      if (!newBases || !newBases.length) return
+      if (formData.value.baseId) {
+        const baseObj = newBases.find(b => (b.base_id || b.id) == formData.value.baseId)
+        if (baseObj) {
+          selectedBase.value = baseObj.base_code || baseObj.baseCode || baseObj.code
+          // fetch floors and set selectedFloor based on floorId
+          if (formData.value.floorId) {
+            const fls = floorsByBase[selectedBase.value] || []
+            const floorObj = fls.find(f => (f.floor_id || f.id) == formData.value.floorId)
+            if (floorObj) selectedFloor.value = floorObj.floor_number || floorObj.floorNumber || floorObj.number
+          }
+        }
+      }
+    })
     
+    const isEdit = computed(() => props.isEdit)
+
     return {
       formData,
       isFormValid,
@@ -533,16 +642,19 @@ export default {
       basesLoading,
       floorsByBase,
       roomLabel,
+      skuPreview,
       clearBase,
       clearFloor,
       handleFrameworkSubjectChange,
       handleSubmit,
       handleOverlayClick,
+      serverErrors: props.serverErrors,
       isSlotAvailable,
       getSelectedSlotsText,
       getSelectedDuration,
       addScheduleDay,
-      removeScheduleDay
+      removeScheduleDay,
+      isEdit,
     }
   }
 }

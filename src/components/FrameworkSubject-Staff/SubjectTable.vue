@@ -96,7 +96,7 @@
               </div>
             </td>
             <td class="semester">
-              <span class="semester-badge">HK {{ subject.semester }}</span>
+              <span class="semester-badge">{{ getSemesterName(subject.semester) }}</span>
             </td>
             <td class="prerequisites">
               <div v-if="subject.prerequisites && subject.prerequisites.length > 0" class="prereq-list">
@@ -210,6 +210,11 @@ const props = defineProps({
   viewMode: {
     type: String,
     default: 'table'
+  }
+  ,
+  semesters: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -481,6 +486,17 @@ const getMajorName = (majorId) => {
     'ds': 'DS'
   }
   return localMap[lower] || majorId
+}
+
+const getSemesterName = (semesterId) => {
+  if (semesterId === null || semesterId === undefined) return ''
+  const sems = props.semesters || []
+  // support objects with id or semester_id
+  const s = (sems || []).find(x => String(x.id || x.semester_id) === String(semesterId))
+  if (s) return s.name || s.title || (`HK ${s.number || semesterId}`)
+  // fallback: if semesterId is numeric just show HK <num>
+  if (!Number.isNaN(Number(semesterId))) return `HK ${semesterId}`
+  return String(semesterId)
 }
 
 const subjectHasMajor = (subject, majorFilter) => {

@@ -57,6 +57,12 @@
               <input v-model="form.user.user_phone" />
             </div>
 
+            <!-- User code / teacher code input: allow typing when creating, read-only when editing -->
+            <div v-if="!isEdit" class="form-group">
+              <label>Mã giảng viên (teacher_code)</label>
+              <input v-model="form.user.user_code" required />
+            </div>
+
             <div class="form-group">
               <label>Họ và tên (teacher_name)</label>
               <input v-model="form.profile.teacher_name" required />
@@ -65,7 +71,8 @@
             <!-- teacher_code is same as user_code — show readonly/disabled when editing so user sees it -->
             <div v-if="isEdit" class="form-group">
               <label>Mã giảng viên (teacher_code)</label>
-              <input v-model="form.profile.teacher_code" disabled class="disabled-highlight" />
+              <!-- Display user_code when editing as well (read-only) -->
+              <input v-model="form.user.user_code" disabled class="disabled-highlight" />
             </div>
 
               <div class="form-group">
@@ -455,7 +462,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100002 !important;
+  z-index: 100000 !important;
   padding: 20px;
 }
 

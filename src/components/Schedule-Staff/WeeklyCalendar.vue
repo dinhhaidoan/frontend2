@@ -36,8 +36,8 @@
       <p>Đang tải lịch học...</p>
     </div>
 
-    <!-- Calendar Grid -->
-    <div v-else class="calendar-grid">
+    <!-- Calendar Grid or List View -->
+    <div v-else-if="currentView !== 'list'" class="calendar-grid">
       <!-- Time Column -->
       <div class="time-column">
         <div class="time-header"></div>
@@ -92,6 +92,16 @@
         </div>
       </div>
     </div>
+    <div v-else class="calendar-list">
+      <WeeklyListView
+        :schedules="schedules"
+        :days="weekDays"
+        :timeSlots="timeSlots"
+        @view:details="$emit('view:details', $event)"
+        @edit:schedule="$emit('edit:schedule', $event)"
+        @delete:schedule="$emit('delete:schedule', $event)"
+      />
+    </div>
 
     <!-- Empty State -->
     <div v-if="!loading && schedules.length === 0" class="empty-state">
@@ -106,9 +116,11 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue'
+import WeeklyListView from './WeeklyListView.vue'
 
 export default {
   name: 'WeeklyCalendar',
+  components: { WeeklyListView },
   props: {
     schedules: {
       type: Array,
@@ -131,7 +143,7 @@ export default {
 
     const viewOptions = [
       { key: 'week', label: 'Tuần' },
-      { key: 'day', label: 'Ngày' }
+      { key: 'list', label: 'Danh sách' }
     ]
 
     const timeSlots = [

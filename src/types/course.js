@@ -16,6 +16,8 @@ export const mapCourse = (raw = {}) => {
   return {
     id,
     sku,
+    code: sku,
+    name: nameVn || nameEn || '',
     nameVn,
     nameEn,
     credits: Number(credits || 0),
