@@ -351,12 +351,70 @@ export default {
       }
     })
 
+    // Build maps for faster lookups
+    const subjectMap = computed(() => {
+      try {
+        const map = {}
+        const arr = Array.isArray(subjects.value) ? subjects.value : (subjects.value?.rows || subjects.value?.items || [])
+        arr.forEach(s => { if (s && (s.id !== undefined)) map[s.id] = s })
+        return map
+      } catch (err) {
+        console.error('subjectMap compute error', err, subjects.value)
+        return {}
+      }
+    })
+
+    const teacherMap = computed(() => {
+      try {
+        const map = {}
+        const arr = Array.isArray(teachers.value) ? teachers.value : (teachers.value?.rows || teachers.value?.items || [])
+        arr.forEach(t => { if (t && (t.id !== undefined)) map[t.id] = t; if (t && t.teacherId !== undefined) map[t.teacherId] = t })
+        return map
+      } catch (err) {
+        console.error('teacherMap compute error', err, teachers.value)
+        return {}
+      }
+    })
+
+    const roomMap = computed(() => {
+      try {
+        const map = {}
+        const arr = Array.isArray(rooms.value) ? rooms.value : (rooms.value?.rows || rooms.value?.items || [])
+        arr.forEach(r => { if (r && (r.id !== undefined)) map[r.id] = r })
+        return map
+      } catch (err) {
+        console.error('roomMap compute error', err, rooms.value)
+        return {}
+      }
+    })
+
+    const enrichSchedule = (s) => {
+      if (!s) return s
+      const out = { ...s }
+      // Try to find subject by subjectId or courseClassId
+      const sub = subjectMap.value[out.subjectId] || subjectMap.value[out.courseClassId] || null
+      if (sub) {
+        out.subjectName = out.subjectName || sub.name || sub.subjectName || sub.subject_name
+        out.subjectCode = out.subjectCode || sub.code || sub.subjectCode || sub.subject_code
+      }
+      // teacher
+      const t = teacherMap.value[out.teacherId]
+      if (t) out.teacherName = out.teacherName || t.name || t.teacherName || t.fullName
+      // room
+      const rm = roomMap.value[out.roomId]
+      if (rm) out.roomName = out.roomName || rm.name || rm.roomName || rm.room_name
+      return out
+    }
+
+    const enrichedClassSchedules = computed(() => (classSchedules.value || []).map(enrichSchedule))
+    const enrichedExamSchedules = computed(() => (examSchedules.value || []).map(enrichSchedule))
+
     const filteredClassSchedules = computed(() => {
-      return filterSchedules(classSchedules.value)
+      return filterSchedules(enrichedClassSchedules.value)
     })
 
     const filteredExamSchedules = computed(() => {
-      return filterSchedules(examSchedules.value)
+      return filterSchedules(enrichedExamSchedules.value)
     })
 
     const filteredAllSchedules = computed(() => {
@@ -380,9 +438,12 @@ export default {
         id: `parent-${p.id || p.schedule_id}`,
         parentId: p.id || p.schedule_id,
         scheduleType: p.scheduleType || p.schedule_type || 'study',
+        subjectId: p.courseClassId || p.course_class_id || p.subjectId || p.subject_id || (p.CourseClass && (p.CourseClass.id || p.CourseClass.course_class_id)) || null,
         subjectName: p.subjectName || p.subject_name || p.CourseClass?.subject_name || p.CourseClass?.name,
         subjectCode: p.subjectCode || p.subject_code || p.CourseClass?.subject_code || '',
+        teacherId: p.teacherId || p.teacher_id || p.Teacher?.id || (p.CourseClass && (p.CourseClass.teacherId || p.CourseClass.teacher_id)) || null,
         teacherName: p.teacherName || p.teacher_name || p.Teacher?.name || '',
+        roomId: p.roomId || p.room_id || p.Room?.id || (p.CourseClass && (p.CourseClass.room_id || p.CourseClass.roomId)) || null,
         roomName: p.roomName || p.room_name || p.Room?.name || '',
         date: p.startDate || p.start_date || null,
         isParentOnly: true,
@@ -393,7 +454,7 @@ export default {
     const combinedListForListView = computed(() => {
       // Combine flattened occurrences and any parent-only rows (no duplicates)
       const occurrences = filteredAllSchedules.value || []
-      const parentEntries = parentOnlyEntriesForList.value || []
+      const parentEntries = (parentOnlyEntriesForList.value || []).map(enrichSchedule)
       return [
         ...occurrences,
         ...parentEntries
@@ -461,8 +522,8 @@ export default {
         const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
         const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
         const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
-        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
-        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam')
+        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
+        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
         try {
           console.debug('reloadAllSchedules: hookRawSchedules', { rawCount: hookRawSchedules.value.length, sampleRaw: hookRawSchedules.value.slice(0,3) })
         } catch (e) {}
@@ -472,6 +533,8 @@ export default {
         try {
           console.debug('reloadAllSchedules: local class & exam counts', { classCount: classSchedules.value.length, examCount: examSchedules.value.length, sampleClass: classSchedules.value.slice(0,5), sampleExam: examSchedules.value.slice(0,5) })
         } catch (e) {}
+        try { console.debug('reloadAllSchedules: enrichedClass sample', enrichedClassSchedules.value.slice(0,5)) } catch (e) {}
+        try { console.debug('reloadAllSchedules: enrichedExam sample', enrichedExamSchedules.value.slice(0,5)) } catch (e) {}
         try { console.debug('reloadAllSchedules: reloaded', { study: classSchedules.value.length, exam: examSchedules.value.length }) } catch (e) {}
       } catch (err) {
         console.error('Failed to reload all schedules:', err)
@@ -482,12 +545,13 @@ export default {
       loading.value = true
       try {
         await Promise.all([
-          reloadAllSchedules(),
           loadSubjects(),
           loadTeachers(),
           loadRooms(),
           loadSemesters()
         ])
+        // Ensure we load schedules after we have subjects/rooms/teachers so enrichment can attach names
+        await reloadAllSchedules()
         await checkConflicts()
         // debug: show loaded counts
         try { console.debug('loadData: loaded schedules', { classCount: classSchedules.value.length, examCount: examSchedules.value.length }) } catch (e) {}
@@ -504,7 +568,7 @@ export default {
         const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
         const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
         // ensure we only assign schedules with type study
-        classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
+        classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
         // debug: log when we load
         if (!classSchedules.value.length) console.debug('loadClassSchedules: no study schedules loaded')
       } catch (err) {
@@ -516,7 +580,7 @@ export default {
       try {
         const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
         const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
-        examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam')
+        examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
         if (!examSchedules.value.length) console.debug('loadExamSchedules: no exam schedules loaded')
       } catch (err) {
         console.error('Failed to load exam schedules:', err)
@@ -630,7 +694,7 @@ export default {
         isEditMode.value = true
         const parentId = schedule.scheduleId || schedule.parentId || schedule.id
         const res = await fetchCourseSchedule(parentId)
-        editingSchedule.value = res // mapped parent schedule
+        editingSchedule.value = enrichSchedule(res) // mapped parent schedule enriched
         showScheduleModal.value = true
       } catch (err) {
         console.error('Failed to fetch schedule for edit', err)
@@ -643,7 +707,7 @@ export default {
         isExamEditMode.value = true
         const parentId = exam.scheduleId || exam.parentId || exam.id
         const res = await fetchCourseSchedule(parentId)
-        editingExam.value = res
+        editingExam.value = enrichSchedule(res)
         showExamModal.value = true
       } catch (err) {
         console.error('Failed to fetch exam for edit', err)
@@ -680,8 +744,8 @@ export default {
         const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
         const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
         const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
-        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
-        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam')
+        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
+        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
         success(`Đã xóa lịch thành công.`)
         closeDeleteScheduleModal()
       } catch (err) {
@@ -703,10 +767,12 @@ export default {
         const params = { page, limit, schedule_type: activeTab.value === 'exam' ? 'exam' : 'study' }
         if (filters.value.search) params.q = filters.value.search
         const res = await fetchCourseSchedules(params)
-          // If fetch returned an array, split it accordingly; otherwise fallback to hookSchedules
-          const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
-          classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study')
-          examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam')
+        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
+        // Map and enrich before assigning
+        const study = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
+        const exam = rows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
+        classSchedules.value = study
+        examSchedules.value = exam
       } catch (err) {
         console.error('Failed to fetch page of schedules', err)
       }
@@ -837,13 +903,13 @@ export default {
         const parentId = schedule.scheduleId || schedule.parentId || schedule.id
         const res = await fetchCourseSchedule(parentId)
         // merge occurrence-specific data into the parent schedule object for display
-        viewingSchedule.value = {
+        viewingSchedule.value = enrichSchedule({
           ...res,
           date: schedule.date || res.startDate || res.start_date,
           startTime: schedule.startTime || res.startTime,
           endTime: schedule.endTime || res.endTime,
           slotNumber: schedule.slotNumber || null
-        }
+        })
         viewingType.value = res.scheduleType || res.schedule_type || (schedule.examType ? 'exam' : 'class')
         showDetailsModal.value = true
       } catch (err) {
@@ -856,13 +922,13 @@ export default {
       try {
         const parentId = exam.scheduleId || exam.parentId || exam.id
         const res = await fetchCourseSchedule(parentId)
-        viewingSchedule.value = {
+        viewingSchedule.value = enrichSchedule({
           ...res,
           date: exam.date || res.startDate || res.start_date,
           startTime: exam.startTime || res.startTime,
           endTime: exam.endTime || res.endTime,
           slotNumber: exam.slotNumber || null
-        }
+        })
         viewingType.value = 'exam'
         showDetailsModal.value = true
       } catch (err) {
@@ -953,6 +1019,11 @@ export default {
       filteredClassSchedules,
       filteredExamSchedules,
       filteredAllSchedules,
+      enrichedClassSchedules,
+      enrichedExamSchedules,
+      subjectMap,
+      teacherMap,
+      roomMap,
       
       // Methods
       weekDaysForList,
