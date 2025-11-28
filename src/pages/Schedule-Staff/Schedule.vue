@@ -387,25 +387,60 @@ export default {
         return {}
       }
     })
-
     const enrichSchedule = (s) => {
       if (!s) return s
       const out = { ...s }
-      // Try to find subject by subjectId or courseClassId
-      const sub = subjectMap.value[out.subjectId] || subjectMap.value[out.courseClassId] || null
+
+      // 1. Lấy ID chuẩn xác (kiểm tra cả camelCase và snake_case)
+      const subjectId = out.courseClassId || out.course_class_id || out.subjectId || out.subject_id
+      const teacherId = out.teacherId || out.teacher_id
+      const roomId = out.roomId || out.room_id
+
+      // 2. Xử lý Tên Môn học / Lớp học phần
+      // Ưu tiên 1: Tìm trong subjectMap (dữ liệu đã load sẵn)
+      const sub = subjectMap.value[subjectId]
       if (sub) {
         out.subjectName = out.subjectName || sub.name || sub.subjectName || sub.subject_name
         out.subjectCode = out.subjectCode || sub.code || sub.subjectCode || sub.subject_code
+      } 
+      // Ưu tiên 2: Tìm trong object lồng nhau (nếu API trả về dạng include)
+      else if (out.CourseClass) {
+        out.subjectName = out.CourseClass.name || out.CourseClass.subject_name
+        out.subjectCode = out.CourseClass.code || out.CourseClass.subject_code
       }
-      // teacher
-      const t = teacherMap.value[out.teacherId]
-      if (t) out.teacherName = out.teacherName || t.name || t.teacherName || t.fullName
-      // room
-      const rm = roomMap.value[out.roomId]
-      if (rm) out.roomName = out.roomName || rm.name || rm.roomName || rm.room_name
+      // Ưu tiên 3: Tìm trong thuộc tính snake_case trực tiếp
+      else {
+        out.subjectName = out.subjectName || out.subject_name
+        out.subjectCode = out.subjectCode || out.subject_code
+      }
+
+      // 3. Xử lý Tên Giáo viên
+      const t = teacherMap.value[teacherId]
+      if (t) {
+        out.teacherName = out.teacherName || t.name || t.teacherName || t.fullName
+      } else if (out.Teacher) {
+        out.teacherName = out.Teacher.name || out.Teacher.full_name || out.Teacher.teacher_name
+      } else {
+        out.teacherName = out.teacherName || out.teacher_name
+      }
+
+      // 4. Xử lý Tên Phòng
+      const rm = roomMap.value[roomId]
+      if (rm) {
+        out.roomName = out.roomName || rm.name || rm.roomName || rm.room_name
+      } else if (out.Room) {
+        out.roomName = out.Room.name || out.Room.room_name
+      } else {
+        out.roomName = out.roomName || out.room_name
+      }
+
+      // 5. Cập nhật lại ID chuẩn để dùng cho các logic khác (edit/delete)
+      out.courseClassId = subjectId
+      out.teacherId = teacherId
+      out.roomId = roomId
+
       return out
     }
-
     const enrichedClassSchedules = computed(() => (classSchedules.value || []).map(enrichSchedule))
     const enrichedExamSchedules = computed(() => (examSchedules.value || []).map(enrichSchedule))
 
@@ -590,28 +625,41 @@ export default {
     const loadSubjects = async () => {
       try {
         await fetchCourseClasses({ page: 1, limit: 500 })
-        // Ensure we have semesters and teachers
+        // Đảm bảo load Semesters và Teachers trước để map tên
         await fetchSemesters()
         await fetchTeachers({ page: 1, limit: 500 })
-        // Map to subject shape expected by modal and provide semester/teacher names
+        
         const semesterMap = (semesters.value || []).reduce((acc, s) => { acc[s.id || s.semester_id] = s; return acc }, {})
-        const teacherMap = (hookTeachers.value || []).reduce((acc, t) => { acc[t.id] = t; if (t.teacherId) acc[t.teacherId] = t; return acc }, {})
+        
+        // Tạo map teacher dùng cả id và teacher_id làm key để chắc chắn tìm thấy
+        const teacherMap = (hookTeachers.value || []).reduce((acc, t) => { 
+          if(t.id) acc[t.id] = t; 
+          if(t.teacherId) acc[t.teacherId] = t;
+          if(t.teacher_id) acc[t.teacher_id] = t; 
+          return acc 
+        }, {})
 
-        subjects.value = (courseClasses.value || []).map(c => {
+        // Xử lý mảng courseClasses (có thể nằm trong .data, .rows hoặc trực tiếp)
+        let classesData = courseClasses.value || []
+        if (classesData.data) classesData = classesData.data
+        if (classesData.rows) classesData = classesData.rows
+
+        subjects.value = classesData.map(c => {
           const semesterId = c.semesterId || c.semester || c.semester_id
           const semester = semesterMap[semesterId]
-          const teacherId = c.teacherId || c.teacher_id || c.teacherId
+          // Lấy teacher ID từ lớp học phần
+          const teacherId = c.teacherId || c.teacher_id || (c.Teacher ? c.Teacher.id : null)
           const teacher = teacherMap[teacherId]
+          
           return {
-            id: c.id,
-            name: c.name,
-            code: c.code,
-            teacherId: teacherId || null,
+            id: c.id || c.course_class_id,
+            name: c.name || c.subject_name,
+            code: c.code || c.subject_code,
+            teacherId: teacherId,
             teacherName: c.teacherName || (teacher ? teacher.name : ''),
-            roomName: c.roomName || c.room || '',
-            semesterId: semesterId || null,
-            semesterName: semester ? (semester.name || semester.semester_name || semester.label) : ''
-            ,
+            roomName: c.roomName || c.room || '', // Room mặc định của lớp (nếu có)
+            semesterId: semesterId,
+            semesterName: semester ? (semester.name || semester.semester_name || semester.label) : '',
             maxStudents: c.maxStudents || c.capacity || 0
           }
         })
