@@ -6,10 +6,6 @@
         <option value="all">Tất cả các ngày</option>
         <option v-for="day in days" :key="day.dayOfWeek" :value="day.dayOfWeek">{{ day.name }}</option>
       </select>
-
-      <div class="view-actions">
-        <button class="btn" @click="$emit('export')">Xuất</button>
-      </div>
     </div>
 
     <div v-if="filteredSchedules.length === 0" class="empty-list">
@@ -25,8 +21,6 @@
           <th>Phòng</th>
           <th>Giảng viên</th>
           <th>Loại</th>
-          <th>Trạng thái</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>

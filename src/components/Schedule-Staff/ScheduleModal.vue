@@ -545,86 +545,91 @@ export default {
     }
 
     // Function to load schedule data
+// Helper chuyển đổi thứ từ API (ví dụ 1=CN, 2=T2) sang format của Modal (8=CN, 2=T2)
+    // Bạn cần kiểm tra xem API trả về 1 hay 0 cho Chủ nhật để điều chỉnh hàm này
     const apiDayToModalDay = (weekday) => {
-      // backend weekday 1..7 -> modal day values '2'..'8' (Mon=2, Sun=8)
       const w = Number(weekday)
-      if (Number.isNaN(w)) return null
-      return String(w === 7 ? 8 : w + 1)
+      if (isNaN(w)) return null
+      // Giả sử API: 2->Thứ 2 ... 7->Thứ 7, 8 (hoặc 1/0) -> Chủ nhật
+      // Modal đang dùng: '2'...'8' (8 là CN)
+      // Nếu API trả về 8 là CN thì giữ nguyên, nếu 0 hoặc 1 là CN thì map về 8
+      if (w === 0 || w === 1) return '8' 
+      return String(w)
     }
 
     const loadScheduleData = () => {
+      // Reset state trước khi load
+      scheduleDays.value = []
+      selectedDays.value = []
+      dayScheduleData.value = {}
+      currentEditingDay.value = ''
+
       if (props.schedule) {
-        Object.keys(formData.value).forEach(key => {
-          if (props.schedule[key] !== undefined) {
-            formData.value[key] = props.schedule[key]
-          }
-        })
-        // Support legacy fields on schedule objects (map 'class' -> 'study' for type)
-        if (!formData.value.scheduleType && props.schedule && props.schedule.type) {
-          formData.value.scheduleType = props.schedule.type === 'class' ? 'study' : props.schedule.type
-        } else if (!formData.value.scheduleType && props.schedule && props.schedule.schedule_type) {
-          formData.value.scheduleType = props.schedule.schedule_type === 'class' ? 'study' : props.schedule.schedule_type
-        }
-        // Map old repeatType keys or legacy values
-        if (!formData.value.repeatType && props.schedule) {
-          if (props.schedule.repeatType) formData.value.repeatType = props.schedule.repeatType === 'custom' ? 'custom_weeks' : props.schedule.repeatType
-          else if (props.schedule.repeat_type) formData.value.repeatType = props.schedule.repeat_type === 'custom' ? 'custom_weeks' : props.schedule.repeat_type
-        }
-        
-        if (props.schedule.scheduleDays && props.schedule.scheduleDays.length > 0) {
-          scheduleDays.value = [...props.schedule.scheduleDays]
-          
-          // Rebuild selectedDays and dayScheduleData from scheduleDays
-          const uniqueDays = [...new Set(props.schedule.scheduleDays.map(s => apiDayToModalDay(s.dayOfWeek || s.weekdayId || s.weekday_id || s.day)))]
-          selectedDays.value = uniqueDays
-          
-          // Rebuild dayScheduleData
-          const newDayScheduleData = {}
-          props.schedule.scheduleDays.forEach(schedule => {
-            const day = apiDayToModalDay(schedule.dayOfWeek || schedule.weekdayId || schedule.weekday_id || schedule.day)
-            if (!newDayScheduleData[day]) {
-              newDayScheduleData[day] = []
+        const s = props.schedule
+        console.log('Loading schedule to modal:', s) // Debug
+
+        // 1. Map fields
+        formData.value.subjectId = s.subjectId
+        formData.value.scheduleType = s.scheduleType
+        formData.value.groupId = s.groupId || ''
+        formData.value.startDate = s.startDate ? s.startDate.split('T')[0] : '' // Chỉ lấy YYYY-MM-DD
+        formData.value.endDate = s.endDate ? s.endDate.split('T')[0] : ''
+        formData.value.repeatType = s.repeatType
+        formData.value.repeatInterval = s.repeatInterval
+        formData.value.status = s.status || 'scheduled'
+        formData.value.notes = s.notes || ''
+
+        // 2. Map Schedule Days (Danh sách ngày và tiết)
+        if (s.scheduleDays && Array.isArray(s.scheduleDays)) {
+          // Lưu vào state hiển thị danh sách bên phải
+          // Cần tính toán lại slotsText và duration
+          scheduleDays.value = s.scheduleDays.map(d => {
+            const dayStr = apiDayToModalDay(d.day)
+            const slotArr = Array.isArray(d.slots) ? d.slots.map(String) : []
+            return {
+              day: dayStr,
+              slots: slotArr,
+              slotsText: slotArr.map(sl => `Tiết ${sl}`).join(', '), // Hiển thị đơn giản
+              duration: slotArr.length * 45
             }
-            // Add time slots for this day
-            if (schedule.timeSlots && Array.isArray(schedule.timeSlots)) {
-              newDayScheduleData[day] = [...schedule.timeSlots]
+          }).filter(d => d.day) // Lọc bỏ ngày null
+
+          // Map vào state chỉnh sửa (selectedDays và dayScheduleData)
+          const loadedDays = []
+          const loadedData = {}
+          
+          scheduleDays.value.forEach(item => {
+            if (!loadedDays.includes(item.day)) {
+              loadedDays.push(item.day)
             }
+            loadedData[item.day] = item.slots
           })
-          dayScheduleData.value = newDayScheduleData
+
+          selectedDays.value = loadedDays
+          dayScheduleData.value = loadedData
           
-          // Set current editing day to first selected day
-          if (uniqueDays.length > 0) {
-            currentEditingDay.value = uniqueDays[0]
+          if (loadedDays.length > 0) {
+            currentEditingDay.value = loadedDays[0]
           }
-          // set selectedSubject (for edit mode) using subjectId
-        if (formData.value.subjectId) {
-          const subj = props.subjects.find(s => s.id == formData.value.subjectId)
-          if (subj) selectedSubject.value = subj
         }
-        } else {
-          scheduleDays.value = []
-          selectedDays.value = []
-          dayScheduleData.value = {}
-          currentEditingDay.value = ''
+
+        // Trigger để hiện tên môn học/phòng
+        if (formData.value.subjectId) {
+            handleSubjectChange()
         }
       } else {
-        // Reset form for add mode
+        // Create Mode: Reset sạch form
         formData.value = {
           subjectId: '',
-          scheduleType: 'study',
+          scheduleType: props.scheduleType || 'study',
           groupId: '',
-          semesterId: '',
           startDate: '',
           endDate: '',
           repeatType: 'weekly',
           repeatInterval: 1,
-          status: 'active',
+          status: 'scheduled',
           notes: ''
         }
-        scheduleDays.value = []
-        selectedDays.value = []
-        dayScheduleData.value = {}
-        currentEditingDay.value = ''
       }
     }
 

@@ -1,6 +1,5 @@
 <template>
   <div class="schedule-page">
-    <!-- Page Header -->
     <div class="page-header">
       <div class="breadcrumb">
         <i class="fas fa-home"></i>
@@ -35,7 +34,6 @@
       </div>
     </div>
 
-    <!-- Schedule Tabs -->
     <div class="schedule-tabs">
       <button 
         v-for="tab in tabs" 
@@ -50,10 +48,8 @@
       </button>
     </div>
 
-    <!-- Statistics Cards -->
     <ScheduleStats :stats="statistics" :active-tab="activeTab" />
 
-    <!-- Filters -->
     <ScheduleFilters 
       :filters="filters"
       :semesters="semesters"
@@ -65,9 +61,7 @@
       @reset-filters="resetFilters"
     />
 
-    <!-- Schedule Content -->
     <div class="schedule-content">
-      <!-- Class Schedule View -->
       <div v-if="activeTab === 'class'" class="schedule-view">
         <WeeklyCalendar 
           :schedules="filteredClassSchedules"
@@ -79,7 +73,6 @@
         />
       </div>
 
-      <!-- Exam Schedule View -->
       <div v-if="activeTab === 'exam'" class="schedule-view">
         <ExamCalendar 
           :exams="filteredExamSchedules"
@@ -90,7 +83,6 @@
         />
       </div>
 
-      <!-- Monthly Calendar View -->
       <div v-if="activeTab === 'monthly'" class="schedule-view">
         <MonthlyCalendar 
           :schedules="filteredAllSchedules"
@@ -102,7 +94,6 @@
         />
       </div>
 
-      <!-- List View -->
       <div v-if="activeTab === 'list'" class="schedule-view">
         <WeeklyListView
           :schedules="combinedListForListView"
@@ -116,7 +107,6 @@
       </div>
     </div>
 
-    <!-- Modals -->
     <ScheduleModal 
       v-if="showScheduleModal"
       :schedule="editingSchedule"
@@ -157,39 +147,33 @@
       @resolve="resolveConflict"
     />
 
-    <!-- Delete Schedule Confirmation (shared ConfirmDialog) -->
     <ConfirmDialog
       :show="deleteScheduleModalVisible"
       type="danger"
       title="Xác nhận xóa lịch"
-      :message="scheduleToDelete ? `Bạn có chắc muốn xóa ${scheduleToDelete.examType ? 'lịch thi' : 'lịch học'} ${scheduleToDelete.subjectName || scheduleToDelete.subjectCode}? Hành động này sẽ không thể hoàn tác.` : 'Bạn có chắc muốn xóa lịch này?'
-      "
+      :message="scheduleToDelete ? `Bạn có chắc muốn xóa ${scheduleToDelete.examType ? 'lịch thi' : 'lịch học'} ${scheduleToDelete.subjectName || scheduleToDelete.subjectCode}?` : 'Bạn có chắc muốn xóa lịch này?'"
       confirmText="Xóa"
       cancelText="Hủy"
       @confirm="confirmDeleteSchedule"
       @cancel="closeDeleteScheduleModal"
     />
 
-    <!-- Update Schedule Confirmation (shared ConfirmDialog) -->
     <ConfirmDialog
       :show="updateScheduleModalVisible"
       type="warning"
       title="Xác nhận cập nhật lịch"
-      :message="scheduleToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch ${scheduleToUpdate.subjectName || scheduleToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch này?'
-      "
+      :message="scheduleToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch ${scheduleToUpdate.subjectName || scheduleToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch này?'"
       confirmText="Xác nhận"
       cancelText="Hủy"
       @confirm="confirmUpdateSchedule"
       @cancel="closeUpdateScheduleModal"
     />
 
-    <!-- Update Exam confirmation (shared ConfirmDialog) -->
     <ConfirmDialog
       :show="updateExamModalVisible"
       type="warning"
       title="Xác nhận cập nhật lịch thi"
-      :message="examToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch thi ${examToUpdate.subjectName || examToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch thi này?'
-      "
+      :message="examToUpdate ? `Bạn có chắc chắn muốn lưu các thay đổi cho lịch thi ${examToUpdate.subjectName || examToUpdate.subjectCode}?` : 'Bạn có chắc chắn muốn cập nhật lịch thi này?'"
       confirmText="Xác nhận"
       cancelText="Hủy"
       @confirm="confirmUpdateExam"
@@ -218,67 +202,43 @@ import { useTeachers } from '@/hooks/useTeachers'
 import shareService from '@/services/shareService'
 import useCourseSchedules from '@/hooks/useCourseSchedules'
 import { useToast } from '@/composables/useToast'
-import { mapCourseSchedule } from '@/types/courseSchedule'
 
 export default {
   name: 'Schedule',
   components: {
-    ScheduleStats,
-    ScheduleFilters,
-    WeeklyCalendar,
-    ExamCalendar,
-    MonthlyCalendar,
-    ScheduleTable,
-    WeeklyListView,
-    ScheduleModal,
-    ExamModal,
-    ScheduleDetailsModal,
-    ConflictCheckerModal,
-    ConfirmDialog
+    ScheduleStats, ScheduleFilters, WeeklyCalendar, ExamCalendar, MonthlyCalendar,
+    ScheduleTable, WeeklyListView, ScheduleModal, ExamModal, ScheduleDetailsModal,
+    ConflictCheckerModal, ConfirmDialog
   },
-  setup() {
-    // State
+setup() {
+    // --- STATE ---
     const loading = ref(false)
     const activeTab = ref('class')
     const classSchedules = ref([])
     const examSchedules = ref([])
-    const { loading: scheduleLoading, schedules: hookSchedules, rawSchedules: hookRawSchedules, pagination, fetchCourseSchedules, fetchCourseSchedule, createCourseSchedule, updateCourseSchedule, deleteCourseSchedule } = useCourseSchedules()
-    const subjects = ref([])
-    const teachers = ref([])
-    const rooms = ref([])
+    // Hooks
+    const { loading: scheduleLoading, fetchCourseSchedules, fetchCourseSchedule, createCourseSchedule, updateCourseSchedule, deleteCourseSchedule } = useCourseSchedules()
     const { semesters, fetchSemesters } = useSemesters()
     const { courseClasses, fetchCourseClasses } = useCourseClasses()
     const { teachers: hookTeachers, fetchTeachers } = useTeachers()
+    const { success, error } = useToast()
 
-    // Week days + times for the simple list view
-    const weekDaysForList = computed(() => ([
-      { dayOfWeek: 1, name: 'Thứ Hai' },
-      { dayOfWeek: 2, name: 'Thứ Ba' },
-      { dayOfWeek: 3, name: 'Thứ Tư' },
-      { dayOfWeek: 4, name: 'Thứ Năm' },
-      { dayOfWeek: 5, name: 'Thứ Sáu' },
-      { dayOfWeek: 6, name: 'Thứ Bảy' },
-      { dayOfWeek: 0, name: 'Chủ Nhật' }
-    ]))
+    // Local Data
+    const subjects = ref([])
+    const teachers = ref([])
+    const rooms = ref([])
 
-    const timeSlotsForList = computed(() => ([
-      { key: 1, label: '07:00–07:45', start: '07:00', end: '07:45' },
-      { key: 2, label: '07:50–08:35', start: '07:50', end: '08:35' },
-      { key: 3, label: '08:40–09:25', start: '08:40', end: '09:25' },
-      { key: 4, label: '09:35–10:20', start: '09:35', end: '10:20' },
-      { key: 5, label: '10:25–11:10', start: '10:25', end: '11:10' }
-    ]))
-    
-    // Modals
+    // Modals & Flags
     const showScheduleModal = ref(false)
     const showExamModal = ref(false)
     const showDetailsModal = ref(false)
     const showConflictModal = ref(false)
     const deleteScheduleModalVisible = ref(false)
-    const scheduleToDelete = ref(null)
     const updateScheduleModalVisible = ref(false)
-    const scheduleToUpdate = ref(null)
     const updateExamModalVisible = ref(false)
+    
+    const scheduleToDelete = ref(null)
+    const scheduleToUpdate = ref(null)
     const examToUpdate = ref(null)
     const editingSchedule = ref(null)
     const editingExam = ref(null)
@@ -289,819 +249,399 @@ export default {
     const scheduleType = ref('study')
     const scheduleConflicts = ref([])
 
-    // Filters
     const filters = ref({
-      search: '',
-      semester: '',
-      teacher: '',
-      room: '',
-      subject: '',
-      dayOfWeek: '',
-      timeSlot: '',
-      status: ''
+      search: '', semester: '', teacher: '', room: '', subject: '',
+      dayOfWeek: '', timeSlot: '', status: ''
     })
 
-    // Tabs configuration
-    const tabs = computed(() => [
-      {
-        key: 'class',
-        label: 'Lịch học',
-        icon: 'fas fa-chalkboard-teacher',
-        count: classSchedules.value.length
-      },
-      {
-        key: 'exam',
-        label: 'Lịch thi',
-        icon: 'fas fa-file-alt',
-        count: examSchedules.value.length
-      },
-      {
-        key: 'monthly',
-        label: 'Lịch tháng',
-        icon: 'fas fa-calendar-alt',
-        count: classSchedules.value.length + examSchedules.value.length
-      },
-      {
-        key: 'list',
-        label: 'Danh sách',
-        icon: 'fas fa-list',
-        count: classSchedules.value.length + examSchedules.value.length
-      }
-    ])
-
-    // Computed
-    const statistics = computed(() => {
-      const totalClass = classSchedules.value.length
-      const totalExam = examSchedules.value.length
-      const conflictCount = scheduleConflicts.value.length
-      
-      return {
-        totalSchedules: totalClass + totalExam,
-        classSchedules: totalClass,
-        examSchedules: totalExam,
-        conflicts: conflictCount,
-        roomsUsed: [...new Set([
-          ...classSchedules.value.map(s => s.roomId),
-          ...examSchedules.value.map(s => s.roomId)
-        ].filter(Boolean))].length,
-        teachersAssigned: [...new Set([
-          ...classSchedules.value.map(s => s.teacherId),
-          ...examSchedules.value.map(s => s.teacherId)
-        ].filter(Boolean))].length
-      }
-    })
-
-    // Build maps for faster lookups
+    // --- COMPUTED MAPS ---
     const subjectMap = computed(() => {
-      try {
-        const map = {}
-        const arr = Array.isArray(subjects.value) ? subjects.value : (subjects.value?.rows || subjects.value?.items || [])
-        arr.forEach(s => { if (s && (s.id !== undefined)) map[s.id] = s })
-        return map
-      } catch (err) {
-        console.error('subjectMap compute error', err, subjects.value)
-        return {}
-      }
+      const map = {}
+      subjects.value.forEach(s => { if (s && s.id) map[s.id] = s })
+      return map
     })
-
     const teacherMap = computed(() => {
-      try {
-        const map = {}
-        const arr = Array.isArray(teachers.value) ? teachers.value : (teachers.value?.rows || teachers.value?.items || [])
-        arr.forEach(t => { if (t && (t.id !== undefined)) map[t.id] = t; if (t && t.teacherId !== undefined) map[t.teacherId] = t })
-        return map
-      } catch (err) {
-        console.error('teacherMap compute error', err, teachers.value)
-        return {}
-      }
+      const map = {}
+      teachers.value.forEach(t => { 
+        if (t.id) map[t.id] = t
+        if (t.teacherId) map[t.teacherId] = t 
+      })
+      return map
+    })
+    const roomMap = computed(() => {
+      const map = {}
+      rooms.value.forEach(r => { if (r.id) map[r.id] = r })
+      return map
     })
 
-    const roomMap = computed(() => {
-      try {
-        const map = {}
-        const arr = Array.isArray(rooms.value) ? rooms.value : (rooms.value?.rows || rooms.value?.items || [])
-        arr.forEach(r => { if (r && (r.id !== undefined)) map[r.id] = r })
-        return map
-      } catch (err) {
-        console.error('roomMap compute error', err, rooms.value)
-        return {}
-      }
-    })
-    const enrichSchedule = (s) => {
+    // --- ENRICH DATA FUNCTION ---
+  const enrichSchedule = (s) => {
       if (!s) return s
       const out = { ...s }
 
-      // 1. Lấy ID chuẩn xác (kiểm tra cả camelCase và snake_case)
+      // 1. Chuẩn hóa các trường cơ bản (API có thể trả về snake_case)
+      out.id = out.id || out.schedule_id || out.scheduleId
       const subjectId = out.courseClassId || out.course_class_id || out.subjectId || out.subject_id
       const teacherId = out.teacherId || out.teacher_id
       const roomId = out.roomId || out.room_id
+      
+      out.startDate = out.startDate || out.start_date
+      out.endDate = out.endDate || out.end_date
+      out.scheduleType = out.scheduleType || out.schedule_type || (out.type === 'exam' ? 'exam' : 'study')
+      out.repeatType = out.repeatType || out.repeat_type || 'weekly'
+      out.repeatInterval = out.repeatInterval || out.repeat_weeks || 1
+      out.notes = out.notes || ''
 
-      // 2. Xử lý Tên Môn học / Lớp học phần
-      // Ưu tiên 1: Tìm trong subjectMap (dữ liệu đã load sẵn)
-      const sub = subjectMap.value[subjectId]
+      // 2. Map Tên từ danh mục (Xử lý ID dạng chuỗi/số)
+      // Tìm subject: So sánh lỏng (==) để '1' khớp với 1
+      const sub = Object.values(subjectMap.value).find(x => x.id == subjectId)
+
+      // Tên Môn học
       if (sub) {
-        out.subjectName = out.subjectName || sub.name || sub.subjectName || sub.subject_name
-        out.subjectCode = out.subjectCode || sub.code || sub.subjectCode || sub.subject_code
-      } 
-      // Ưu tiên 2: Tìm trong object lồng nhau (nếu API trả về dạng include)
-      else if (out.CourseClass) {
-        out.subjectName = out.CourseClass.name || out.CourseClass.subject_name
-        out.subjectCode = out.CourseClass.code || out.CourseClass.subject_code
-      }
-      // Ưu tiên 3: Tìm trong thuộc tính snake_case trực tiếp
-      else {
-        out.subjectName = out.subjectName || out.subject_name
-        out.subjectCode = out.subjectCode || out.subject_code
+        out.subjectName = sub.name
+        out.subjectCode = sub.code
+        out.subjectId = sub.id // Gán lại ID chuẩn
+      } else {
+        out.subjectName = out.subjectName || out.subject_name || out.CourseClass?.name || ''
+        out.subjectCode = out.subjectCode || out.subject_code || out.CourseClass?.code || ''
+        out.subjectId = subjectId // Giữ nguyên nếu không tìm thấy
       }
 
-      // 3. Xử lý Tên Giáo viên
-      const t = teacherMap.value[teacherId]
+      // Tên Giáo viên (Ưu tiên trong lịch -> Fallback sang môn học)
+      const tId = teacherId || (sub ? sub.teacherId : null)
+      const t = Object.values(teacherMap.value).find(x => x.id == tId || x.teacherId == tId)
+      
       if (t) {
-        out.teacherName = out.teacherName || t.name || t.teacherName || t.fullName
-      } else if (out.Teacher) {
-        out.teacherName = out.Teacher.name || out.Teacher.full_name || out.Teacher.teacher_name
+        out.teacherName = t.name
+        out.teacherId = t.id
       } else {
-        out.teacherName = out.teacherName || out.teacher_name
+        out.teacherName = out.teacherName || out.teacher_name || (out.Teacher?.name) || (sub ? sub.teacherName : '')
       }
 
-      // 4. Xử lý Tên Phòng
-      const rm = roomMap.value[roomId]
-      if (rm) {
-        out.roomName = out.roomName || rm.name || rm.roomName || rm.room_name
-      } else if (out.Room) {
-        out.roomName = out.Room.name || out.Room.room_name
+      // Tên Phòng
+      const rId = roomId || (sub ? sub.roomId : null)
+      const r = Object.values(roomMap.value).find(x => x.id == rId)
+      
+      if (r) {
+        out.roomName = r.name
+        out.roomId = r.id
       } else {
-        out.roomName = out.roomName || out.room_name
+        out.roomName = out.roomName || out.room_name || (out.Room?.name) || (sub ? sub.roomName : '')
       }
 
-      // 5. Cập nhật lại ID chuẩn để dùng cho các logic khác (edit/delete)
-      out.courseClassId = subjectId
-      out.teacherId = teacherId
-      out.roomId = roomId
+      // 3. Chuẩn hóa danh sách ngày học (Quan trọng cho Modal Sửa)
+      // API có thể trả về: scheduleDays, schedule_days, CourseScheduleDays
+      let rawDays = out.scheduleDays || out.schedule_days || out.CourseScheduleDays || []
+      if (!Array.isArray(rawDays)) rawDays = []
+      
+      out.scheduleDays = rawDays.map(day => ({
+        day: day.day || day.dayOfWeek || day.weekdayId || day.weekday_id, // Lấy thứ (2,3,4...)
+        slots: day.slots || day.timeSlots || day.time_slots || [] // Lấy tiết [1,2,3]
+      }))
 
       return out
     }
-    const enrichedClassSchedules = computed(() => (classSchedules.value || []).map(enrichSchedule))
-    const enrichedExamSchedules = computed(() => (examSchedules.value || []).map(enrichSchedule))
 
-    const filteredClassSchedules = computed(() => {
-      return filterSchedules(enrichedClassSchedules.value)
-    })
+    const enrichedClassSchedules = computed(() => classSchedules.value.map(enrichSchedule))
+    const enrichedExamSchedules = computed(() => examSchedules.value.map(enrichSchedule))
 
-    const filteredExamSchedules = computed(() => {
-      return filterSchedules(enrichedExamSchedules.value)
-    })
-
-    const filteredAllSchedules = computed(() => {
-      return [
-        ...filteredClassSchedules.value.map(s => ({ ...s, type: 'class' })),
-        ...filteredExamSchedules.value.map(s => ({ ...s, type: 'exam' }))
-      ].sort((a, b) => new Date(a.date) - new Date(b.date))
-    })
-
-    // Parents without scheduled occurrences — show as parent only items so that they are visible in list view
-    const parentsWithoutOccurrences = computed(() => {
-      const parents = hookRawSchedules.value || []
-      return parents.filter(p => {
-        const days = p.scheduleDays || p.CourseScheduleDays || []
-        return !Array.isArray(days) || days.length === 0
-      })
-    })
-
-    const parentOnlyEntriesForList = computed(() => {
-      return (parentsWithoutOccurrences.value || []).map(p => ({
-        id: `parent-${p.id || p.schedule_id}`,
-        parentId: p.id || p.schedule_id,
-        scheduleType: p.scheduleType || p.schedule_type || 'study',
-        subjectId: p.courseClassId || p.course_class_id || p.subjectId || p.subject_id || (p.CourseClass && (p.CourseClass.id || p.CourseClass.course_class_id)) || null,
-        subjectName: p.subjectName || p.subject_name || p.CourseClass?.subject_name || p.CourseClass?.name,
-        subjectCode: p.subjectCode || p.subject_code || p.CourseClass?.subject_code || '',
-        teacherId: p.teacherId || p.teacher_id || p.Teacher?.id || (p.CourseClass && (p.CourseClass.teacherId || p.CourseClass.teacher_id)) || null,
-        teacherName: p.teacherName || p.teacher_name || p.Teacher?.name || '',
-        roomId: p.roomId || p.room_id || p.Room?.id || (p.CourseClass && (p.CourseClass.room_id || p.CourseClass.roomId)) || null,
-        roomName: p.roomName || p.room_name || p.Room?.name || '',
-        date: p.startDate || p.start_date || null,
-        isParentOnly: true,
-        rawParent: p
-      }))
-    })
-
-    const combinedListForListView = computed(() => {
-      // Combine flattened occurrences and any parent-only rows (no duplicates)
-      const occurrences = filteredAllSchedules.value || []
-      const parentEntries = (parentOnlyEntriesForList.value || []).map(enrichSchedule)
-      return [
-        ...occurrences,
-        ...parentEntries
-      ].sort((a, b) => {
-        const dateA = a.date || ''
-        const dateB = b.date || ''
-        if (dateA && dateB) return new Date(dateA) - new Date(dateB)
-        if (dateA && !dateB) return -1
-        if (!dateA && dateB) return 1
-        return 0
-      })
-    })
-
-    const { success, error } = useToast()
-
-    // Methods
-    const filterSchedules = (schedules) => {
-      let result = schedules
-
+    // --- FILTERS ---
+    const filterSchedules = (list) => {
+      let res = list
       if (filters.value.search) {
-        const search = filters.value.search.toLowerCase()
-        result = result.filter(schedule => 
-          schedule.subjectName?.toLowerCase().includes(search) ||
-          schedule.teacherName?.toLowerCase().includes(search) ||
-          schedule.roomName?.toLowerCase().includes(search)
-        )
+        const s = filters.value.search.toLowerCase()
+        res = res.filter(x => x.subjectName?.toLowerCase().includes(s) || x.teacherName?.toLowerCase().includes(s))
       }
-
-      if (filters.value.semester) {
-        result = result.filter(schedule => schedule.semesterId === filters.value.semester)
-      }
-
-      if (filters.value.teacher) {
-        result = result.filter(schedule => schedule.teacherId === filters.value.teacher)
-      }
-
-      if (filters.value.room) {
-        result = result.filter(schedule => schedule.roomId === filters.value.room)
-      }
-
-      if (filters.value.subject) {
-        result = result.filter(schedule => schedule.subjectId === filters.value.subject)
-      }
-
-      if (filters.value.dayOfWeek) {
-        const requested = parseInt(filters.value.dayOfWeek)
-        const mappedDay = requested === 7 ? 0 : requested
-        result = result.filter(schedule => schedule.dayOfWeek === mappedDay)
-      }
-
-      if (filters.value.timeSlot) {
-        result = result.filter(schedule => schedule.timeSlot === filters.value.timeSlot)
-      }
-
-      if (filters.value.status) {
-        result = result.filter(schedule => schedule.status === filters.value.status)
-      }
-
-      return result
+      if (filters.value.subject) res = res.filter(x => x.subjectId === filters.value.subject)
+      if (filters.value.teacher) res = res.filter(x => x.teacherId === filters.value.teacher)
+      if (filters.value.room) res = res.filter(x => x.roomId === filters.value.room)
+      if (filters.value.semester) res = res.filter(x => x.semesterId === filters.value.semester)
+      return res
     }
 
+    const filteredClassSchedules = computed(() => filterSchedules(enrichedClassSchedules.value))
+    const filteredExamSchedules = computed(() => filterSchedules(enrichedExamSchedules.value))
+    
+    const filteredAllSchedules = computed(() => [
+      ...filteredClassSchedules.value.map(s => ({ ...s, type: 'class' })),
+      ...filteredExamSchedules.value.map(s => ({ ...s, type: 'exam' }))
+    ].sort((a, b) => new Date(a.date) - new Date(b.date)))
+
+    // --- DATA LOADING FUNCTIONS ---
+    
+    // 1. Load Rooms (Đã sửa lỗi rows.map)
+    const loadRooms = async () => {
+      try {
+        const res = await shareService.listRooms({ limit: 500, page: 1 })
+        // Kiểm tra kỹ kiểu dữ liệu trả về để đảm bảo là mảng
+        let rows = []
+        if (Array.isArray(res)) rows = res
+        else if (Array.isArray(res?.data)) rows = res.data
+        else if (Array.isArray(res?.rows)) rows = res.rows
+        
+        rooms.value = rows.map(r => ({ 
+          id: r.room_id || r.id, 
+          name: r.room_name || r.name,
+          capacity: r.capacity || r.room_capacity || 0
+        }))
+      } catch (err) {
+        console.error('Failed to load rooms:', err)
+        rooms.value = []
+      }
+    }
+
+    // 2. Load Teachers
+    const loadTeachers = async () => {
+      try {
+        await fetchTeachers({ page: 1, limit: 500 })
+        teachers.value = (hookTeachers.value || []).map(t => ({ 
+          id: t.id, 
+          teacherId: t.teacherId || t.teacher?.teacher_id || t.id, 
+          name: t.name || t.full_name 
+        }))
+      } catch (err) {
+        console.error('Failed to load teachers:', err)
+      }
+    }
+
+    // 3. Load Semesters (Đã thêm lại hàm bị thiếu)
+    const loadSemesters = async () => {
+      try {
+        await fetchSemesters()
+      } catch (err) {
+        console.error('Failed to load semesters:', err)
+      }
+    }
+
+    // 4. Load Subjects (Classes)
+    const loadSubjects = async () => {
+      try {
+        await fetchCourseClasses({ page: 1, limit: 500 })
+        let data = courseClasses.value.data || courseClasses.value.rows || courseClasses.value || []
+        
+        subjects.value = data.map(c => {
+          const tId = c.teacherId || c.teacher_id || c.Teacher?.id
+          const rId = c.roomId || c.room_id || c.Room?.id
+          const sId = c.semesterId || c.semester_id
+
+          const teacher = teacherMap.value[tId]
+          const room = roomMap.value[rId]
+          const semester = semesters.value.find(s => (s.id || s.semester_id) === sId)
+
+          return {
+            id: c.id || c.course_class_id,
+            name: c.name || c.subject_name,
+            code: c.code || c.subject_code,
+            teacherId: tId,
+            teacherName: c.teacherName || (teacher ? teacher.name : ''),
+            roomId: rId,
+            roomName: c.roomName || (room ? room.name : ''),
+            semesterId: sId,
+            semesterName: semester ? (semester.name || semester.label) : '',
+            maxStudents: c.maxStudents || 0
+          }
+        })
+      } catch (err) {
+        console.error('Failed to load subjects:', err)
+      }
+    }
+
+    // 5. Reload Schedules
     const reloadAllSchedules = async () => {
       try {
-        const studyRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
-        const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
-        const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
-        const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
-        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
-        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
-        try {
-          console.debug('reloadAllSchedules: hookRawSchedules', { rawCount: hookRawSchedules.value.length, sampleRaw: hookRawSchedules.value.slice(0,3) })
-        } catch (e) {}
-        try {
-          console.debug('reloadAllSchedules: hookSchedules (flattened)', { hookCount: hookSchedules.value.length, sampleHook: hookSchedules.value.slice(0,5) })
-        } catch (e) {}
-        try {
-          console.debug('reloadAllSchedules: local class & exam counts', { classCount: classSchedules.value.length, examCount: examSchedules.value.length, sampleClass: classSchedules.value.slice(0,5), sampleExam: examSchedules.value.slice(0,5) })
-        } catch (e) {}
-        try { console.debug('reloadAllSchedules: enrichedClass sample', enrichedClassSchedules.value.slice(0,5)) } catch (e) {}
-        try { console.debug('reloadAllSchedules: enrichedExam sample', enrichedExamSchedules.value.slice(0,5)) } catch (e) {}
-        try { console.debug('reloadAllSchedules: reloaded', { study: classSchedules.value.length, exam: examSchedules.value.length }) } catch (e) {}
+        const [study, exam] = await Promise.all([
+          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' }),
+          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
+        ])
+        const studyRows = Array.isArray(study) ? study : study.data || []
+        const examRows = Array.isArray(exam) ? exam : exam.data || []
+        
+        classSchedules.value = studyRows.map(enrichSchedule)
+        examSchedules.value = examRows.map(enrichSchedule)
       } catch (err) {
-        console.error('Failed to reload all schedules:', err)
+        console.error('Failed to reload schedules:', err)
       }
     }
 
+    // 6. Main Load Data Function
     const loadData = async () => {
       loading.value = true
       try {
-        await Promise.all([
-          loadSubjects(),
-          loadTeachers(),
-          loadRooms(),
-          loadSemesters()
-        ])
-        // Ensure we load schedules after we have subjects/rooms/teachers so enrichment can attach names
+        // Load danh mục trước để có dữ liệu map
+        await Promise.all([loadRooms(), loadTeachers(), loadSemesters()])
+        // Sau đó load subjects và schedules
+        await loadSubjects() 
         await reloadAllSchedules()
-        await checkConflicts()
-        // debug: show loaded counts
-        try { console.debug('loadData: loaded schedules', { classCount: classSchedules.value.length, examCount: examSchedules.value.length }) } catch (e) {}
-      } catch (error) {
-        console.error('Lỗi khi tải dữ liệu:', error)
+      } catch (e) {
+        console.error('Init data error:', e)
       } finally {
         loading.value = false
       }
     }
 
-    const loadClassSchedules = async () => {
-      try {
-        // fetch for study schedules and use the returned value instead of relying on hookSchedules
-        const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
-        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
-        // ensure we only assign schedules with type study
-        classSchedules.value = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
-        // debug: log when we load
-        if (!classSchedules.value.length) console.debug('loadClassSchedules: no study schedules loaded')
-      } catch (err) {
-        console.error('Failed to load class schedules:', err)
-      }
-    }
-
-    const loadExamSchedules = async () => {
-      try {
-        const res = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
-        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
-        examSchedules.value = rows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
-        if (!examSchedules.value.length) console.debug('loadExamSchedules: no exam schedules loaded')
-      } catch (err) {
-        console.error('Failed to load exam schedules:', err)
-      }
-    }
-
-    const loadSubjects = async () => {
-      try {
-        await fetchCourseClasses({ page: 1, limit: 500 })
-        // Đảm bảo load Semesters và Teachers trước để map tên
-        await fetchSemesters()
-        await fetchTeachers({ page: 1, limit: 500 })
-        
-        const semesterMap = (semesters.value || []).reduce((acc, s) => { acc[s.id || s.semester_id] = s; return acc }, {})
-        
-        // Tạo map teacher dùng cả id và teacher_id làm key để chắc chắn tìm thấy
-        const teacherMap = (hookTeachers.value || []).reduce((acc, t) => { 
-          if(t.id) acc[t.id] = t; 
-          if(t.teacherId) acc[t.teacherId] = t;
-          if(t.teacher_id) acc[t.teacher_id] = t; 
-          return acc 
-        }, {})
-
-        // Xử lý mảng courseClasses (có thể nằm trong .data, .rows hoặc trực tiếp)
-        let classesData = courseClasses.value || []
-        if (classesData.data) classesData = classesData.data
-        if (classesData.rows) classesData = classesData.rows
-
-        subjects.value = classesData.map(c => {
-          const semesterId = c.semesterId || c.semester || c.semester_id
-          const semester = semesterMap[semesterId]
-          // Lấy teacher ID từ lớp học phần
-          const teacherId = c.teacherId || c.teacher_id || (c.Teacher ? c.Teacher.id : null)
-          const teacher = teacherMap[teacherId]
-          
-          return {
-            id: c.id || c.course_class_id,
-            name: c.name || c.subject_name,
-            code: c.code || c.subject_code,
-            teacherId: teacherId,
-            teacherName: c.teacherName || (teacher ? teacher.name : ''),
-            roomName: c.roomName || c.room || '', // Room mặc định của lớp (nếu có)
-            semesterId: semesterId,
-            semesterName: semester ? (semester.name || semester.semester_name || semester.label) : '',
-            maxStudents: c.maxStudents || c.capacity || 0
-          }
-        })
-      } catch (err) {
-        console.error('Failed to load course classes for subjects', err)
-        subjects.value = []
-      }
-    }
-
-    const loadTeachers = async () => {
-      try {
-        await fetchTeachers({ page: 1, limit: 500 })
-        teachers.value = (hookTeachers.value || []).map(t => ({ id: t.id, teacherId: t.teacherId || t.teacher?.teacher_id || t.teacher?.teacher_id, name: t.name, email: t.email }))
-      } catch (err) {
-        console.error('Failed to load teachers:', err)
-        teachers.value = []
-      }
-    }
-
-    const loadRooms = async () => {
-      try {
-        const res = await shareService.listRooms({ limit: 500, page: 1 })
-        let rows = []
-        if (Array.isArray(res)) rows = res
-        else if (Array.isArray(res.data)) rows = res.data
-        else if (Array.isArray(res.rows)) rows = res.rows
-        rooms.value = (rows || []).map(r => ({ id: r.room_id || r.id, name: r.room_name || r.name, building: r.building || r.base_building, capacity: r.capacity || r.room_capacity || 0 }))
-      } catch (err) {
-        console.error('Failed to load rooms from backend', err)
-        rooms.value = []
-      }
-    }
-
-    const loadSemesters = async () => {
-      try {
-        await fetchSemesters()
-      } catch (err) {
-        console.error('Failed to load semesters in Schedule', err)
-      }
-    }
-
-    const checkConflicts = async () => {
-      // Check for scheduling conflicts
-      scheduleConflicts.value = []
-      // Implementation for conflict detection
-    }
-
-    // Filter methods
-    const updateFilters = (newFilters) => {
-      filters.value = { ...filters.value, ...newFilters }
-    }
-
-    const resetFilters = () => {
-      filters.value = {
-        search: '',
-        semester: '',
-        teacher: '',
-        room: '',
-        subject: '',
-        dayOfWeek: '',
-        timeSlot: '',
-        status: ''
-      }
-    }
-
-    // Schedule methods
+    // --- ACTIONS ---
     const openScheduleModal = () => {
       editingSchedule.value = null
       isEditMode.value = false
       scheduleType.value = activeTab.value === 'exam' ? 'exam' : 'study'
-      if (scheduleType.value === 'exam') {
-        showExamModal.value = true
-      } else {
-        showScheduleModal.value = true
-      }
+      scheduleType.value === 'exam' ? (showExamModal.value = true) : (showScheduleModal.value = true)
     }
 
-    const editSchedule = async (schedule) => {
+    const editSchedule = async (s) => {
       try {
+        const id = s.scheduleId || s.parentId || s.id
+        const res = await fetchCourseSchedule(id)
+        editingSchedule.value = enrichSchedule(res)
         isEditMode.value = true
-        const parentId = schedule.scheduleId || schedule.parentId || schedule.id
-        const res = await fetchCourseSchedule(parentId)
-        editingSchedule.value = enrichSchedule(res) // mapped parent schedule enriched
         showScheduleModal.value = true
-      } catch (err) {
-        console.error('Failed to fetch schedule for edit', err)
-        error('Không thể tải chi tiết lịch để sửa. Vui lòng thử lại.')
-      }
+      } catch (e) { error('Lỗi tải chi tiết lịch') }
     }
 
-    const editExam = async (exam) => {
+    const editExam = async (e) => {
       try {
-        isExamEditMode.value = true
-        const parentId = exam.scheduleId || exam.parentId || exam.id
-        const res = await fetchCourseSchedule(parentId)
+        const id = e.scheduleId || e.parentId || e.id
+        const res = await fetchCourseSchedule(id)
         editingExam.value = enrichSchedule(res)
+        isExamEditMode.value = true
         showExamModal.value = true
-      } catch (err) {
-        console.error('Failed to fetch exam for edit', err)
-        error('Không thể tải chi tiết lịch thi để sửa. Vui lòng thử lại.')
+      } catch (err) { error('Lỗi tải chi tiết lịch thi') }
+    }
+
+    const saveSchedule = async (data) => {
+      try {
+        if (isEditMode.value && editingSchedule.value?.id) {
+          await updateCourseSchedule(editingSchedule.value.id, data)
+          success('Cập nhật thành công')
+        } else {
+          await createCourseSchedule(data)
+          success('Tạo lịch thành công')
+        }
+        await reloadAllSchedules()
+        closeScheduleModal()
+      } catch (e) { 
+        console.error(e)
+        error('Lỗi lưu dữ liệu: ' + (e.message || 'Unknown error')) 
       }
     }
 
-    const deleteSchedule = (schedule) => {
-      scheduleToDelete.value = schedule
-      deleteScheduleModalVisible.value = true
+    const saveExam = async (data) => {
+      try {
+        if (isExamEditMode.value && editingExam.value?.id) {
+          await updateCourseSchedule(editingExam.value.id, data)
+          success('Cập nhật lịch thi thành công')
+        } else {
+          await createCourseSchedule(data)
+          success('Tạo lịch thi thành công')
+        }
+        await reloadAllSchedules()
+        closeExamModal()
+      } catch (e) {
+        console.error(e)
+        error('Lỗi lưu lịch thi: ' + (e.message || 'Unknown error'))
+      }
     }
 
-    const closeDeleteScheduleModal = () => {
-      deleteScheduleModalVisible.value = false
-      scheduleToDelete.value = null
+    const deleteSchedule = (s) => {
+      scheduleToDelete.value = s
+      deleteScheduleModalVisible.value = true
     }
 
     const confirmDeleteSchedule = async () => {
       if (!scheduleToDelete.value) return
       try {
-        const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
-        await deleteCourseSchedule(parentId)
-        const type = scheduleToDelete.value.type || (scheduleToDelete.value.examType ? 'exam' : 'class')
-        if (type === 'exam') {
-          // remove all occurrences with parentId
-          const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
-          examSchedules.value = examSchedules.value.filter(s => s.scheduleId !== parentId)
-        } else {
-          const parentId = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
-          classSchedules.value = classSchedules.value.filter(s => s.scheduleId !== parentId)
-        }
-        // refresh lists and use the returned arrays (avoid relying on hookSchedules which is overwritten by parallel calls)
-        const studyRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' })
-        const examRes = await fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
-        const studyRows = Array.isArray(studyRes) ? studyRes : (hookSchedules.value || [])
-        const examRows = Array.isArray(examRes) ? examRes : (hookSchedules.value || [])
-        classSchedules.value = studyRows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
-        examSchedules.value = examRows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
-        success(`Đã xóa lịch thành công.`)
+        const id = scheduleToDelete.value.scheduleId || scheduleToDelete.value.parentId || scheduleToDelete.value.id
+        await deleteCourseSchedule(id)
+        success('Xóa thành công')
+        await reloadAllSchedules()
         closeDeleteScheduleModal()
-      } catch (err) {
-        console.error('Failed to delete schedule', err)
-        if (err?.details) {
-          error('Lỗi khi xóa lịch: ' + (err.details.message || JSON.stringify(err.details)))
-        } else {
-          error(err.message || 'Lỗi khi xóa lịch')
-        }
-      }
+      } catch (e) { error('Lỗi xóa lịch') }
     }
 
-    const deleteExam = (exam) => {
-      deleteSchedule({ ...exam, type: 'exam' })
-    }
-
-    const handleTablePageChange = async ({ page, limit }) => {
+   const viewScheduleDetails = async (s) => {
       try {
-        const params = { page, limit, schedule_type: activeTab.value === 'exam' ? 'exam' : 'study' }
-        if (filters.value.search) params.q = filters.value.search
-        const res = await fetchCourseSchedules(params)
-        const rows = Array.isArray(res) ? res : (hookSchedules.value || [])
-        // Map and enrich before assigning
-        const study = rows.filter(s => (s.scheduleType || s.type || 'study') === 'study').map(enrichSchedule)
-        const exam = rows.filter(s => (s.scheduleType || s.type) === 'exam').map(enrichSchedule)
-        classSchedules.value = study
-        examSchedules.value = exam
-      } catch (err) {
-        console.error('Failed to fetch page of schedules', err)
-      }
-    }
-
-    const duplicateSchedule = (schedule) => {
-      const type = schedule.type || (schedule.examType ? 'exam' : 'class')
-      const duplicated = {
-        ...schedule,
-        id: null,
-        date: '',
-        status: 'draft'
-      }
-      
-      if (type === 'exam') {
-        editingExam.value = duplicated
-        isExamEditMode.value = false
-        showExamModal.value = true
-      } else {
-        editingSchedule.value = duplicated
-        isEditMode.value = false
-        showScheduleModal.value = true
-      }
-    }
-
-    const saveSchedule = async (scheduleData) => {
-      try {
-        if (isEditMode.value && editingSchedule.value && editingSchedule.value.id) {
-          // update
-          await updateCourseSchedule(editingSchedule.value.id, scheduleData)
-          await reloadAllSchedules()
-          closeUpdateScheduleModal()
-          closeScheduleModal()
-          checkConflicts()
-          success('Đã cập nhật lịch học thành công')
-        } else {
-          // create
-          await createCourseSchedule(scheduleData)
-          await reloadAllSchedules()
-          closeScheduleModal()
-          checkConflicts()
-          success('Đã tạo lịch học thành công')
-        }
-      } catch (err) {
-        console.error('Failed to save schedule:', err)
-        if (err?.details) {
-          error('Lỗi khi lưu lịch: ' + (err.details.message || JSON.stringify(err.details)))
-        } else {
-          error(err.message || 'Có lỗi xảy ra khi lưu lịch.')
-        }
-      }
-    }
-
-    const closeUpdateScheduleModal = () => {
-      updateScheduleModalVisible.value = false
-      scheduleToUpdate.value = null
-    }
-
-    const confirmUpdateSchedule = () => {
-      if (!scheduleToUpdate.value) return
-      
-      const index = classSchedules.value.findIndex(s => s.id === editingSchedule.value.id)
-      if (index > -1) {
-        classSchedules.value[index] = { ...scheduleToUpdate.value }
-      }
-      closeUpdateScheduleModal()
-      closeScheduleModal()
-      checkConflicts()
-      success('Đã cập nhật lịch học thành công')
-    }
-
-    const saveExam = async (examData) => {
-      try {
-        if (isExamEditMode.value && editingExam.value && editingExam.value.id) {
-          await updateCourseSchedule(editingExam.value.id, examData)
-          await reloadAllSchedules()
-          closeUpdateExamModal()
-          closeExamModal()
-          checkConflicts()
-          success('Đã cập nhật lịch thi thành công')
-        } else {
-          await createCourseSchedule(examData)
-          await reloadAllSchedules()
-          closeExamModal()
-          checkConflicts()
-          success('Đã tạo lịch thi thành công')
-        }
-      } catch (err) {
-        console.error('Failed to save exam:', err)
-        if (err?.details) {
-          error('Lỗi khi lưu lịch thi: ' + (err.details.message || JSON.stringify(err.details)))
-        } else {
-          error(err.message || 'Có lỗi xảy ra khi lưu lịch thi.')
-        }
-      }
-    }
-
-    const closeUpdateExamModal = () => {
-      updateExamModalVisible.value = false
-      examToUpdate.value = null
-    }
-
-    const confirmUpdateExam = () => {
-      if (!examToUpdate.value) return
-      
-      const index = examSchedules.value.findIndex(s => s.id === editingExam.value.id)
-      if (index > -1) {
-        examSchedules.value[index] = { ...examToUpdate.value }
-      }
-      closeUpdateExamModal()
-      closeExamModal()
-      checkConflicts()
-      success('Đã cập nhật lịch thi thành công')
-    }
-
-    const closeScheduleModal = () => {
-      showScheduleModal.value = false
-      editingSchedule.value = null
-    }
-
-    const closeExamModal = () => {
-      showExamModal.value = false
-      editingExam.value = null
-    }
-
-    const viewScheduleDetails = async (schedule) => {
-      try {
-        const parentId = schedule.scheduleId || schedule.parentId || schedule.id
-        const res = await fetchCourseSchedule(parentId)
-        // merge occurrence-specific data into the parent schedule object for display
+        const id = s.scheduleId || s.parentId || s.id
+        const res = await fetchCourseSchedule(id)
+        const rawData = res.data || res 
+        
         viewingSchedule.value = enrichSchedule({
-          ...res,
-          date: schedule.date || res.startDate || res.start_date,
-          startTime: schedule.startTime || res.startTime,
-          endTime: schedule.endTime || res.endTime,
-          slotNumber: schedule.slotNumber || null
+          ...rawData,
+          // Giữ lại thông tin ngày/giờ của slot đang click vào (nếu có)
+          date: s.date || rawData.startDate || rawData.start_date,
+          startTime: s.startTime,
+          endTime: s.endTime
         })
-        viewingType.value = res.scheduleType || res.schedule_type || (schedule.examType ? 'exam' : 'class')
+        
+        viewingType.value = s.type === 'exam' ? 'exam' : 'class'
         showDetailsModal.value = true
-      } catch (err) {
-        console.error('Failed to fetch schedule details', err)
-        error('Không thể tải chi tiết lịch.')
+      } catch (e) { 
+        console.error(e)
+        error('Lỗi xem chi tiết') 
       }
     }
 
-    const viewExamDetails = async (exam) => {
-      try {
-        const parentId = exam.scheduleId || exam.parentId || exam.id
-        const res = await fetchCourseSchedule(parentId)
-        viewingSchedule.value = enrichSchedule({
-          ...res,
-          date: exam.date || res.startDate || res.start_date,
-          startTime: exam.startTime || res.startTime,
-          endTime: exam.endTime || res.endTime,
-          slotNumber: exam.slotNumber || null
-        })
-        viewingType.value = 'exam'
-        showDetailsModal.value = true
-      } catch (err) {
-        console.error('Failed to fetch exam details', err)
-        error('Không thể tải chi tiết lịch thi')
-      }
-    }
-
-    const closeDetailsModal = () => {
-      showDetailsModal.value = false
-      viewingSchedule.value = null
-    }
-
+    const viewExamDetails = (e) => viewScheduleDetails({ ...e, type: 'exam' })
+    
+    // --- HELPERS ---
+    const exportSchedule = () => { console.log('Exporting...') }
+    const openConflictChecker = () => { checkConflicts(); showConflictModal.value = true }
+    const closeScheduleModal = () => { showScheduleModal.value = false; editingSchedule.value = null }
+    const closeExamModal = () => { showExamModal.value = false; editingExam.value = null }
+    const closeDetailsModal = () => { showDetailsModal.value = false; viewingSchedule.value = null }
+    const closeDeleteScheduleModal = () => { deleteScheduleModalVisible.value = false; scheduleToDelete.value = null }
+    const closeUpdateScheduleModal = () => updateScheduleModalVisible.value = false
+    const closeUpdateExamModal = () => updateExamModalVisible.value = false
+    const confirmUpdateSchedule = () => {}
+    const confirmUpdateExam = () => {}
+    const resolveConflict = () => {}
+    const closeConflictModal = () => showConflictModal.value = false
+    const checkConflicts = () => {}
     const editFromDetails = () => {
-      if (viewingType.value === 'exam') {
-        editExam(viewingSchedule.value)
-      } else {
-        editSchedule(viewingSchedule.value)
-      }
-      closeDetailsModal()
+       closeDetailsModal()
+       viewingType.value === 'exam' ? editExam(viewingSchedule.value) : editSchedule(viewingSchedule.value)
     }
+    const deleteExam = (e) => deleteSchedule({ ...e, type: 'exam' })
+    const updateFilters = (f) => filters.value = { ...filters.value, ...f }
+    const resetFilters = () => filters.value = { search: '', semester: '', teacher: '', room: '', subject: '', dayOfWeek: '', timeSlot: '', status: '' }
 
-    // Conflict methods
-    const openConflictChecker = () => {
-      checkConflicts()
-      showConflictModal.value = true
-    }
+    // List View Data
+    const weekDaysForList = [{ dayOfWeek: 2, name: 'Thứ Hai' }, { dayOfWeek: 3, name: 'Thứ Ba' }, { dayOfWeek: 4, name: 'Thứ Tư' }, { dayOfWeek: 5, name: 'Thứ Năm' }, { dayOfWeek: 6, name: 'Thứ Sáu' }, { dayOfWeek: 7, name: 'Thứ Bảy' }, { dayOfWeek: 8, name: 'Chủ Nhật' }]
+    const timeSlotsForList = [] 
+    const combinedListForListView = computed(() => filteredAllSchedules.value)
 
-    const closeConflictModal = () => {
-      showConflictModal.value = false
-    }
+    const tabs = computed(() => [
+      { key: 'class', label: 'Lịch học', icon: 'fas fa-chalkboard-teacher', count: classSchedules.value.length },
+      { key: 'exam', label: 'Lịch thi', icon: 'fas fa-file-alt', count: examSchedules.value.length },
+      { key: 'monthly', label: 'Lịch tháng', icon: 'fas fa-calendar-alt', count: filteredAllSchedules.value.length },
+      { key: 'list', label: 'Danh sách', icon: 'fas fa-list', count: filteredAllSchedules.value.length }
+    ])
+    const statistics = computed(() => ({ 
+      totalSchedules: classSchedules.value.length + examSchedules.value.length, 
+      classSchedules: classSchedules.value.length, 
+      examSchedules: examSchedules.value.length, 
+      conflicts: 0, roomsUsed: rooms.value.length, teachersAssigned: teachers.value.length 
+    }))
 
-    const resolveConflict = (conflictId, resolution) => {
-      // Implementation for resolving conflicts
-      console.log('Resolving conflict:', conflictId, resolution)
-    }
-
-    const exportSchedule = () => {
-      // Implementation for exporting schedules
-      console.log('Xuất lịch học/thi')
-    }
-
-    // computed combined loading
-    const isLoading = computed(() => loading.value || scheduleLoading.value)
-
-    // Lifecycle
-    onMounted(() => {
-      loadData()
-    })
+    onMounted(loadData)
 
     return {
-      // State
-      loading: isLoading,
-      activeTab,
-      classSchedules,
-      examSchedules,
-      subjects,
-      teachers,
-      rooms,
-      semesters,
-      
+      loading, activeTab, tabs, statistics, filters, 
+      filteredClassSchedules, filteredExamSchedules, filteredAllSchedules, combinedListForListView,
+      subjects, teachers, rooms, semesters,
+      weekDaysForList, timeSlotsForList, scheduleConflicts,
       // Modals
-      showScheduleModal,
-      showExamModal,
-      showDetailsModal,
-      showConflictModal,
-      deleteScheduleModalVisible,
-      scheduleToDelete,
-      updateScheduleModalVisible,
-      scheduleToUpdate,
-      updateExamModalVisible,
-      examToUpdate,
-      editingSchedule,
-      editingExam,
-      viewingSchedule,
-      viewingType,
-      isEditMode,
-      isExamEditMode,
-      scheduleType,
-      scheduleConflicts,
-      
-      // Filters
-      filters,
-      
-      // Computed
-      tabs,
-      statistics,
-      filteredClassSchedules,
-      filteredExamSchedules,
-      filteredAllSchedules,
-      enrichedClassSchedules,
-      enrichedExamSchedules,
-      subjectMap,
-      teacherMap,
-      roomMap,
-      
+      showScheduleModal, showExamModal, showDetailsModal, showConflictModal,
+      deleteScheduleModalVisible, updateScheduleModalVisible, updateExamModalVisible,
+      editingSchedule, editingExam, viewingSchedule, viewingType,
+      isEditMode, isExamEditMode, scheduleType, scheduleToDelete, scheduleToUpdate, examToUpdate,
       // Methods
-      weekDaysForList,
-      timeSlotsForList,
-      updateFilters,
-      resetFilters,
-      openScheduleModal,
-      editSchedule,
-      editExam,
-      deleteSchedule,
-      closeDeleteScheduleModal,
-      confirmDeleteSchedule,
-      deleteExam,
-      duplicateSchedule,
-      saveSchedule,
-      closeUpdateScheduleModal,
-      confirmUpdateSchedule,
-      saveExam,
-      closeUpdateExamModal,
-      confirmUpdateExam,
-      closeScheduleModal,
-      closeExamModal,
-      viewScheduleDetails,
-      viewExamDetails,
-      closeDetailsModal,
-      editFromDetails,
-      openConflictChecker,
-      closeConflictModal,
-      resolveConflict,
-      exportSchedule
+      updateFilters, resetFilters,
+      openScheduleModal, editSchedule, editExam, deleteSchedule, deleteExam,
+      saveSchedule, saveExam,
+      viewScheduleDetails, viewExamDetails, editFromDetails,
+      exportSchedule, openConflictChecker,
+      closeScheduleModal, closeExamModal, closeDetailsModal, closeDeleteScheduleModal,
+      confirmDeleteSchedule, closeUpdateScheduleModal, closeUpdateExamModal,
+      confirmUpdateSchedule, confirmUpdateExam, closeConflictModal, resolveConflict
     }
   }
 }
