@@ -152,7 +152,7 @@
               <div class="form-group">
                 <label>Lớp hành chính <span class="required">*</span></label>
                 <select v-model="formData.officialClass" :disabled="classesLoading" required>
-                  <option value="">Chọn lớp</option>
+                  <option value="">{{ classesLoading ? 'Đang tải danh sách lớp...' : 'Chọn lớp' }}</option>
                   <option v-for="cls in filteredClassList" :key="cls.id" :value="cls.id">{{ cls.code || cls.name }}</option>
                 </select>
               </div>
@@ -223,7 +223,7 @@
             <button type="button" @click="close" class="btn-cancel">
               <i class="fas fa-times"></i> Hủy
             </button>
-            <button type="submit" class="btn-submit">
+            <button type="submit" class="btn-submit" :disabled="props.uploading">
               <i class="fas fa-save"></i>
               {{ isEdit ? 'Cập nhật' : 'Thêm mới' }}
             </button>
@@ -251,12 +251,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'submit'])
-
 const isEdit = ref(false)
-
 const formData = reactive({
+  id: '',
   studentCode: '',
-  fullName: '',
   password: '',
   confirmPassword: '',
   dateOfBirth: '',
@@ -284,15 +282,17 @@ const { majors, fetchMajors, loading: majorsLoading } = useMajors()
 const { officeClasses, fetchOfficeClasses, loading: classesLoading } = useOfficeClasses()
 const { academicYears, fetchAcademicYears, loading: yearsLoading } = useAcademicYears()
 const { teachers, fetchTeachers, loading: teachersLoading } = useTeachers()
-
 // Local computed lists to use in selects
 const classList = computed(() => (officeClasses.value || []).map(c => ({ id: c.id, code: c.code, name: c.name, major_id: c.major_id, major: c.major || c.majorName || c.majorName || (c.Major && (c.Major.major_name || c.Major.major_id || c.Major.id)), academic_year_id: c.academic_year_id || c.course || null, course: c.course || c.academic_year_id || null, advisorId: c.advisorId || c.advisor_id || c.teacher_id || null })))
+const lookupsLoading = computed(() => majorsLoading || classesLoading || yearsLoading || teachersLoading)
+
 const filteredClassList = computed(() => {
-  const list = classList.value
+  const list = classList.value.slice() // copy so we can safely append
   const m = formData.major
   const y = formData.course
-  if (!m && !y) return list
-  return list.filter(c => {
+  let result = list
+  if (m || y) {
+    result = list.filter(c => {
     // Major comparison: support numeric id or string code
     let majorMatch = true
     if (m) {
@@ -301,6 +301,21 @@ const filteredClassList = computed(() => {
         majorMatch = (c.major_id !== undefined && c.major_id !== null && Number(c.major_id) === mNum) || (c.Major && (Number(c.Major.major_id) === mNum || Number(c.Major.id) === mNum))
       } else {
         majorMatch = String(c.major || c.majorName || c.code || '').toLowerCase() === String(m).toLowerCase()
+      }
+      // If the filtered list doesn't include the currently selected class value, try to include it
+      const selectedClassId = formData.officialClass
+      if (selectedClassId) {
+        const has = list.find(c => Number(c.id) === Number(selectedClassId))
+        if (!has) {
+          // Try to add a fallback option if the selected class exists in full class list
+          const fullMatch = (officeClasses.value || []).find(c => Number(c.id) === Number(selectedClassId) || Number(c.office_class_id) === Number(selectedClassId))
+          if (fullMatch) {
+            list.push({ id: fullMatch.id, code: fullMatch.code, name: fullMatch.name, major_id: fullMatch.major_id, academic_year_id: fullMatch.academic_year_id })
+          } else {
+            // Add minimal placeholder so select displays the id
+            list.push({ id: selectedClassId, code: String(selectedClassId), name: `Lớp ${selectedClassId}`, major_id: null, academic_year_id: null })
+          }
+        }
       }
     }
     // Year/course comparison: support numeric id or string code
@@ -313,8 +328,23 @@ const filteredClassList = computed(() => {
         yearMatch = String(c.course || c.academic_year_id || '').toLowerCase() === String(y).toLowerCase()
       }
     }
-    return majorMatch && yearMatch
-  })
+      return majorMatch && yearMatch
+    })
+  }
+  // Add selected class to the options list if it's not included
+  const selectedClassId = formData.officialClass
+  if (selectedClassId) {
+    const has = result.find(c => Number(c.id) === Number(selectedClassId))
+    if (!has) {
+      const fullMatch = (officeClasses.value || []).find(c => Number(c.id) === Number(selectedClassId) || Number(c.office_class_id) === Number(selectedClassId))
+      if (fullMatch) {
+        result.push({ id: fullMatch.id, code: fullMatch.code, name: fullMatch.name, major_id: fullMatch.major_id, academic_year_id: fullMatch.academic_year_id })
+      } else {
+        result.push({ id: selectedClassId, code: String(selectedClassId), name: `Lớp ${selectedClassId}`, major_id: null, academic_year_id: null })
+      }
+    }
+  }
+  return result
 })
 // advisor lock: when selected class has an advisor, lock advisor select and set advisorId
 const advisorLocked = computed(() => {
@@ -338,10 +368,11 @@ const majorsList = computed(() => (majors.value || []).map(m => ({ id: m.major_i
 const yearsList = computed(() => (academicYears.value || []).map(y => ({ id: y.academic_year_id || y.id, name: y.academic_year_name || y.name, code: y.code || null })))
 
 const resetForm = () => {
+  formData.id = ''
   Object.keys(formData).forEach((key) => {
     if (key === 'status') {
       formData[key] = 'studying'
-    } else {
+    } else if (key !== 'id') {
       formData[key] = ''
     }
   })
@@ -412,6 +443,7 @@ watch(
   (newStudent) => {
     if (newStudent) {
       isEdit.value = true
+      formData.id = newStudent.id || newStudent.student_id || newStudent.raw?.id || null
       // Normalize incoming shape to our formData - prefer numeric IDs
       formData.studentCode = newStudent.studentCode || newStudent.userCode || newStudent.student_code || newStudent.user_code || ''
       formData.fullName = newStudent.fullName || newStudent.student_name || newStudent.user_fullname || ''
@@ -421,15 +453,20 @@ watch(
       formData.phoneNumber = newStudent.phoneNumber || newStudent.user_phone || ''
       formData.identityCard = newStudent.identityCard || newStudent.student_CCCD || ''
       formData.address = newStudent.address || newStudent.student_address || ''
-      // major: try major_id, then major code, then Major object - normalize to Number if present
-      formData.major = newStudent.major || newStudent.major_id || (newStudent.Major && (newStudent.Major.major_id || newStudent.Major.id)) || (newStudent.major && (newStudent.major.major_id || newStudent.major.id)) || ''
+      // major: prefer incoming numeric id fields (majorId, major_id, Major.major_id) - fallback to name
+      formData.major = newStudent.majorId || newStudent.major || newStudent.major_id || (newStudent.Major && (newStudent.Major.major_id || newStudent.Major.id)) || (newStudent.major && (newStudent.major.major_id || newStudent.major.id)) || ''
       formData.major = formData.major === '' ? '' : Number(formData.major)
       // course / academic year
-      formData.course = newStudent.course || newStudent.academic_year_id || (newStudent.AcademicYear && (newStudent.AcademicYear.academic_year_id || newStudent.AcademicYear.id)) || ''
+      formData.course = newStudent.courseId || newStudent.course || newStudent.academic_year_id || (newStudent.AcademicYear && (newStudent.AcademicYear.academic_year_id || newStudent.AcademicYear.id)) || ''
       formData.course = formData.course === '' ? '' : Number(formData.course)
       // officialClass: try numeric id first
-      formData.officialClass = newStudent.officialClass || newStudent.office_class_id || newStudent.officialClassId || newStudent.officeClassId || ''
+      formData.officialClass = newStudent.officialClassId || newStudent.office_class_id || newStudent.officialClass || newStudent.officeClassId || ''
       formData.officialClass = formData.officialClass === '' ? '' : Number(formData.officialClass)
+      // If we received a class name/code instead of ID, try to resolve it to ID using officeClasses
+      if (!formData.officialClass && newStudent.officialClass && officeClasses.value && officeClasses.value.length) {
+        const found = officeClasses.value.find(c => String(c.code || c.name || c.id).toLowerCase() === String(newStudent.officialClass).toLowerCase())
+        if (found) formData.officialClass = Number(found.id)
+      }
       formData.status = newStudent.status || (newStudent.student_active ? 'studying' : newStudent.status) || 'studying'
       formData.advisorId = newStudent.advisorId || newStudent.advisor_id || (newStudent.advisor && (newStudent.advisor.id || newStudent.advisor.teacher_id || newStudent.advisor.user_id)) || ''
       formData.advisorId = formData.advisorId === '' ? '' : Number(formData.advisorId)
@@ -544,6 +581,19 @@ watch(filteredClassList, (val) => {
 })
 
 const handleSubmit = () => {
+  // Only block submission when required dropdown options are absent AND the form field is empty.
+  const majorsReady = (majorsList.value && majorsList.value.length > 0) || !!formData.major
+  const yearsReady = (yearsList.value && yearsList.value.length > 0) || !!formData.course
+  const classesReady = ((classList.value && classList.value.length > 0) || (officeClasses.value && officeClasses.value.length > 0)) || !!formData.officialClass
+
+  const missing = []
+  if (!majorsReady) missing.push('Ngành')
+  if (!yearsReady) missing.push('Khóa')
+  if (!classesReady) missing.push('Lớp')
+  if (missing.length) {
+    alert(`Vui lòng chờ dữ liệu danh mục (${missing.join('/')}) tải xong trước khi lưu.`)
+    return
+  }
   // If creating and password is provided, confirm match; else allow and backend will set default
   if (!isEdit.value && formData.password) {
     if (formData.password !== formData.confirmPassword) {
@@ -559,6 +609,11 @@ const handleSubmit = () => {
         return
       }
     }
+  }
+  // Validate class: ensure official class is set (client-side validation)
+  if (!formData.officialClass) {
+    alert('Vui lòng chọn lớp hành chính của sinh viên')
+    return
   }
   emit('submit', { ...formData, parents: formData.parents && formData.parents.length ? formData.parents.map(p => ({ parent_name: p.parent_name, parent_relationship: p.parent_relationship, parent_contact: p.parent_contact })) : undefined, avatarFile: formData.avatarFile })
 }

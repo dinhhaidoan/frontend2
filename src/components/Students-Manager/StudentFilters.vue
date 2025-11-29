@@ -24,12 +24,7 @@
         <label><i class="fas fa-graduation-cap"></i> Ngành học</label>
         <select v-model="localFilters.major" @change="handleFilterChange">
           <option value="">Tất cả ngành</option>
-          <option value="IT">Công nghệ thông tin</option>
-          <option value="CS">Khoa học máy tính</option>
-          <option value="IS">Hệ thống thông tin</option>
-          <option value="DS">Khoa học dữ liệu</option>
-          <option value="AI">Trí tuệ nhân tạo</option>
-          <option value="SE">Kỹ thuật phần mềm</option>
+          <option v-for="m in majorsList" :key="m.id" :value="m.id">{{ m.name }}</option>
         </select>
       </div>
 
@@ -38,11 +33,7 @@
         <label><i class="fas fa-calendar-alt"></i> Khóa</label>
         <select v-model="localFilters.course" @change="handleFilterChange">
           <option value="">Tất cả khóa</option>
-          <option value="2020">K2020</option>
-          <option value="2021">K2021</option>
-          <option value="2022">K2022</option>
-          <option value="2023">K2023</option>
-          <option value="2024">K2024</option>
+          <option v-for="y in yearsList" :key="y.id" :value="y.id">{{ y.code || y.name }}</option>
         </select>
       </div>
 
@@ -51,7 +42,7 @@
         <label><i class="fas fa-users"></i> Lớp hành chính</label>
         <select v-model="localFilters.officialClass" @change="handleFilterChange">
           <option value="">Tất cả lớp</option>
-          <option v-for="cls in classList" :key="cls" :value="cls">{{ cls }}</option>
+          <option v-for="cls in classesList" :key="cls.id" :value="cls.id">{{ cls.code || cls.name }}</option>
         </select>
       </div>
 
@@ -67,102 +58,16 @@
           <option value="expelled">Thôi học</option>
         </select>
       </div>
-
-      <!-- Cố vấn học tập -->
-      <div class="filter-group">
-        <label><i class="fas fa-user-tie"></i> Cố vấn học tập</label>
-        <select v-model="localFilters.advisor" @change="handleFilterChange">
-          <option value="">Tất cả cố vấn</option>
-          <option v-for="advisor in advisorList" :key="advisor.id" :value="advisor.id">
-            {{ advisor.name }}
-          </option>
-        </select>
-      </div>
-
-      <!-- GPA -->
-      <div class="filter-group">
-        <label><i class="fas fa-chart-line"></i> GPA tối thiểu</label>
-        <input
-          v-model.number="localFilters.minGPA"
-          type="number"
-          min="0"
-          max="4"
-          step="0.1"
-          placeholder="0.0 - 4.0"
-          @input="handleFilterChange"
-        />
-      </div>
-
-      <!-- Tín chỉ tích lũy -->
-      <div class="filter-group">
-        <label><i class="fas fa-award"></i> Tín chỉ tối thiểu</label>
-        <input
-          v-model.number="localFilters.minCredits"
-          type="number"
-          min="0"
-          placeholder="Số tín chỉ"
-          @input="handleFilterChange"
-        />
-      </div>
-
-      <!-- Bộ lọc nâng cao -->
-      <div class="filter-group full-width">
-        <button @click="toggleAdvancedFilters" class="btn-advanced">
-          <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
-          Bộ lọc nâng cao
-        </button>
-      </div>
-
-      <!-- Các bộ lọc nâng cao -->
-      <template v-if="showAdvanced">
-        <div class="filter-group">
-          <label><i class="fas fa-exclamation-triangle"></i> Cảnh báo học tập</label>
-          <select v-model="localFilters.warning" @change="handleFilterChange">
-            <option value="">Tất cả</option>
-            <option value="low_gpa">GPA thấp</option>
-            <option value="insufficient_credits">Thiếu tín chỉ</option>
-            <option value="overtime">Quá hạn đào tạo</option>
-            <option value="retake">Có môn học lại</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label><i class="fas fa-calendar-check"></i> Học kỳ</label>
-          <select v-model="localFilters.semester" @change="handleFilterChange">
-            <option value="">Tất cả học kỳ</option>
-            <option value="1_2024">HK1 2024-2025</option>
-            <option value="2_2024">HK2 2024-2025</option>
-            <option value="1_2023">HK1 2023-2024</option>
-            <option value="2_2023">HK2 2023-2024</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label><i class="fas fa-venus-mars"></i> Giới tính</label>
-          <select v-model="localFilters.gender" @change="handleFilterChange">
-            <option value="">Tất cả</option>
-            <option value="male">Nam</option>
-            <option value="female">Nữ</option>
-            <option value="other">Khác</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label><i class="fas fa-map-marker-alt"></i> Nơi sinh</label>
-          <input
-            v-model="localFilters.birthPlace"
-            type="text"
-            placeholder="Tỉnh/Thành phố"
-            @input="handleFilterChange"
-          />
-        </div>
-      </template>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { useMajors } from '@/hooks/useMajors'
+import { useAcademicYears } from '@/hooks/useAcademicYears'
+import { useOfficeClasses } from '@/hooks/useOfficeClasses'
+import { useTeachers } from '@/hooks/useTeachers'
 
 const emit = defineEmits(['update:filters'])
 
@@ -183,22 +88,35 @@ const localFilters = reactive({
   birthPlace: ''
 })
 
-const classList = ref([
-  '22IT1', '22IT2', '22IT3', '22IT4',
-  '23IT1', '23IT2', '23IT3',
-  '24IT1', '24IT2'
-])
+// Use API hooks for dynamic lists
+const { majors, fetchMajors } = useMajors()
+const { academicYears, fetchAcademicYears } = useAcademicYears()
+const { officeClasses, fetchOfficeClasses } = useOfficeClasses()
+const { teachers, fetchTeachers } = useTeachers()
 
-const advisorList = ref([
-  { id: 1, name: 'TS. Nguyễn Văn A' },
-  { id: 2, name: 'ThS. Trần Thị B' },
-  { id: 3, name: 'TS. Lê Văn C' },
-  { id: 4, name: 'PGS.TS. Phạm Thị D' }
-])
+// Compute list shapes for templates
+const majorsList = computed(() => (majors.value || []).map(m => ({ id: m.major_id || m.id, name: m.major_name || m.name })))
+const yearsList = computed(() => (academicYears.value || []).map(y => ({ id: y.academic_year_id || y.id, name: y.academic_year_name || y.name, code: y.code || '' })))
+const classesList = computed(() => (officeClasses.value || []).map(c => ({ id: c.id || c.office_class_id, code: c.code || c.name, name: c.name || c.code })))
+const teachersList = computed(() => (teachers.value || []).map(t => ({ id: t.id || t.teacherId, name: t.name || t.teacher_name })))
 
 const handleFilterChange = () => {
   emit('update:filters', { ...localFilters })
 }
+
+onMounted(async () => {
+  try {
+    // Attempt to fetch a large set so filters are comprehensive
+    await Promise.all([
+      fetchMajors({ page: 1, limit: 200 }),
+      fetchAcademicYears({ page: 1, limit: 200 }),
+      fetchOfficeClasses({ page: 1, limit: 500 }),
+      fetchTeachers({ page: 1, limit: 500 })
+    ])
+  } catch (e) {
+    console.warn('[StudentFilters] lookup fetch failed', e)
+  }
+})
 
 const resetFilters = () => {
   Object.keys(localFilters).forEach(key => {

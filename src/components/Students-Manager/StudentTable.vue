@@ -60,10 +60,6 @@
             <th>Lớp</th>
             <th>Ngành</th>
             <th>Khóa</th>
-            <th @click="sort('gpa')">
-              GPA
-              <i class="fas fa-sort"></i>
-            </th>
             <th @click="sort('credits')">
               Tín chỉ
               <i class="fas fa-sort"></i>
@@ -107,14 +103,9 @@
               <span class="badge class-badge">{{ student.officialClass }}</span>
             </td>
             <td>{{ student.major }}</td>
-            <td>K{{ student.course }}</td>
+            <td>Khóa: {{ student.course }}</td>
             <td>
-              <span class="gpa-badge" :class="getGPAClass(student.gpa)">
-                {{ student.gpa.toFixed(2) }}
-              </span>
-            </td>
-            <td>
-              <span class="credits-badge">{{ student.credits }} TC</span>
+              <span class="credits-badge">{{ student.credits }} Tín chỉ</span>
             </td>
             <td>
               <span class="status-badge" :class="student.status">
@@ -176,12 +167,8 @@
               <span>{{ student.major }}</span>
             </div>
             <div class="info-item">
-              <i class="fas fa-chart-line"></i>
-              <span>GPA: {{ student.gpa.toFixed(2) }}</span>
-            </div>
-            <div class="info-item">
               <i class="fas fa-award"></i>
-              <span>{{ student.credits }} TC</span>
+              <span>{{ student.credits }} Tín chỉ</span>
             </div>
           </div>
         </div>
@@ -343,14 +330,6 @@ const getStatusLabel = (status) => {
     expelled: 'Thôi học'
   }
   return labels[status] || status
-}
-
-const getGPAClass = (gpa) => {
-  if (gpa >= 3.6) return 'excellent'
-  if (gpa >= 3.2) return 'good'
-  if (gpa >= 2.5) return 'average'
-  if (gpa >= 2.0) return 'fair'
-  return 'poor'
 }
 </script>
 
@@ -527,37 +506,6 @@ const getGPAClass = (gpa) => {
 .class-badge {
   background: #e3f2fd;
   color: #1976d2;
-}
-
-.gpa-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-weight: 700;
-}
-
-.gpa-badge.excellent {
-  background: #c8e6c9;
-  color: #2e7d32;
-}
-
-.gpa-badge.good {
-  background: #b3e5fc;
-  color: #0277bd;
-}
-
-.gpa-badge.average {
-  background: #fff9c4;
-  color: #f57f17;
-}
-
-.gpa-badge.fair {
-  background: #ffe0b2;
-  color: #e65100;
-}
-
-.gpa-badge.poor {
-  background: #ffcdd2;
-  color: #c62828;
 }
 
 .credits-badge {

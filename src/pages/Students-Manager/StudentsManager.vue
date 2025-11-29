@@ -107,8 +107,14 @@ import StudentViewModal from '@/components/Students-Manager/StudentViewModal.vue
 import BulkActions from '@/components/Students-Manager/BulkActions.vue'
 import ImportModal from '@/components/Students-Manager/ImportModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { useMajors } from '@/hooks/useMajors'
+import { useAcademicYears } from '@/hooks/useAcademicYears'
+import { useOfficeClasses } from '@/hooks/useOfficeClasses'
 
 // State
+const { majors, fetchMajors } = useMajors()
+const { academicYears, fetchAcademicYears } = useAcademicYears()
+const { officeClasses, fetchOfficeClasses } = useOfficeClasses()
 const { accounts, fetchUsers, createUser, updateUser, deleteUser } = useUsers()
 const students = ref([])
 const selectedStudents = ref([])
@@ -149,11 +155,30 @@ const updateStudentMessage = computed(() => {
 
 const mapAccountToStudent = (u) => {
   const s = u.raw?.Student || {}
+  const majorId = s.major || s.major_id;
+  const majorObj = majors.value.find(m => m.id == majorId || m.major_id == majorId);
+  const majorName = majorObj ? (majorObj.name || majorObj.major_name) : (majorId || '');
+
+  // Helper tìm tên khóa (Academic Year)
+  const courseId = s.course || s.academic_year_id || s.raw?.Student?.academic_year_id;
+  const courseObj = academicYears.value.find(y => y.id == courseId || y.academic_year_id == courseId);
+  const courseName = courseObj ? (courseObj.name || courseObj.academic_year_name || courseObj.code) : (courseId || '');
+
+  // Helper tìm tên lớp
+  const classId = s.officialClass || s.office_class_id;
+  const classObj = officeClasses.value.find(c => c.id == classId || c.office_class_id == classId);
+  const className = classObj ? (classObj.name || classObj.code) : (classId || '');
   return {
     id: s.student_id || u.id || u.raw?.user_id,
     studentCode: s.student_code || u.userId || u.raw?.user_code,
     userCode: u.userId || u.raw?.user_code || (s.user_code || null),
     fullName: s.student_name || u.name || u.raw?.user_fullname || u.raw?.user_code,
+    major: majorName,
+    majorId: majorId || null,
+    course: courseName,
+    courseId: courseId || null,
+    officialClass: className,
+    officialClassId: classId || null,
     email: u.email || u.raw?.user_email || '',
     phoneNumber: u.phone || u.raw?.user_phone || '',
     dateOfBirth: s.student_birthdate || '',
@@ -161,9 +186,8 @@ const mapAccountToStudent = (u) => {
     identityCard: s.student_CCCD || '',
     address: s.student_address || '',
     birthPlace: s.student_place_of_birth || '',
-    major: s.major || s.major_id || '',
-    course: s.academic_year_id || s.course || s.raw?.Student?.academic_year_id || '',
-    officialClass: s.office_class_id || s.officialClass || '',
+    // preserve raw IDs for programmatic use if needed
+    // majorId, courseId, officialClassId are set above
     status: s.student_active ? 'studying' : 'inactive',
     gpa: s.gpa || 0,
     credits: s.credits || 0,
@@ -260,15 +284,15 @@ const filteredStudents = computed(() => {
   }
 
   if (filters.value.major) {
-    result = result.filter((s) => s.major === filters.value.major)
+    result = result.filter((s) => String(s.majorId || s.major || '') === String(filters.value.major))
   }
 
   if (filters.value.course) {
-    result = result.filter((s) => s.course === filters.value.course)
+    result = result.filter((s) => String(s.courseId || s.course || '') === String(filters.value.course))
   }
 
   if (filters.value.officialClass) {
-    result = result.filter((s) => s.officialClass === filters.value.officialClass)
+    result = result.filter((s) => String(s.officialClassId || s.officialClass || '') === String(filters.value.officialClass))
   }
 
   if (filters.value.status) {
@@ -276,7 +300,7 @@ const filteredStudents = computed(() => {
   }
 
   if (filters.value.advisor) {
-    result = result.filter((s) => s.advisorId === filters.value.advisor)
+    result = result.filter((s) => String(s.advisorId || '') === String(filters.value.advisor))
   }
 
   if (filters.value.minGPA !== null && filters.value.minGPA !== undefined) {
@@ -355,6 +379,14 @@ watch(accounts, (newVal) => {
   students.value = studentAccounts.map(mapAccountToStudent)
 }, { immediate: true })
 
+watch([majors, academicYears, officeClasses], () => {
+   // Khi danh mục tải xong, map lại danh sách sinh viên để hiển thị tên thay vì ID
+   if (accounts.value && accounts.value.length > 0) {
+      const studentAccounts = accounts.value.filter(a => a.role === 'student' || /* logic check role */ true) 
+      // Filter logic giữ nguyên như cũ trong code gốc của bạn
+      students.value = studentAccounts.map(mapAccountToStudent)
+   }
+})
 const handleFilterChange = (newFilters) => {
   filters.value = newFilters
   currentPage.value = 1
@@ -738,8 +770,14 @@ const handleExport = () => {
 }
 
 // Lifecycle
-onMounted(() => {
-  loadStudents()
+onMounted(async () => {
+  // Tải danh sách danh mục trước hoặc song song
+  await Promise.all([
+    fetchMajors(),
+    fetchAcademicYears({ limit: 100 }), // Lấy nhiều để đủ mapping
+    fetchOfficeClasses({ limit: 500 })  // Lấy nhiều để đủ mapping
+  ])
+  await loadStudents()
 })
 </script>
 

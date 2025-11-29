@@ -42,28 +42,6 @@
         <span class="percentage">{{ calculatePercentage(stats.graduated) }}%</span>
       </div>
     </div>
-
-    <div class="stat-card warning">
-      <div class="stat-icon">
-        <i class="fas fa-exclamation-triangle"></i>
-      </div>
-      <div class="stat-content">
-        <h3>{{ stats.warning }}</h3>
-        <p>Cảnh báo học tập</p>
-        <span class="percentage">{{ calculatePercentage(stats.warning) }}%</span>
-      </div>
-    </div>
-
-    <div class="stat-card avg-gpa">
-      <div class="stat-icon">
-        <i class="fas fa-chart-line"></i>
-      </div>
-      <div class="stat-content">
-        <h3>{{ stats.avgGPA.toFixed(2) }}</h3>
-        <p>GPA trung bình</p>
-        <span class="grade">{{ getGradeLabel(stats.avgGPA) }}</span>
-      </div>
-    </div>
   </div>
 </template>
 
