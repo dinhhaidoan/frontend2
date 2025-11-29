@@ -124,7 +124,7 @@
              <div v-else-if="teacherSubjects.length > 0" class="subjects-list">
                 <div v-for="subject in teacherSubjects" :key="subject.id" class="subject-card">
                   <div class="subject-info">
-                    <h5>{{ subject.name || subject.code || 'Chưa đặt tên' }}</h5>
+                    <h5>{{ subject.name }}</h5>
                     <p class="subject-code">{{ subject.code }}</p>
                     <div class="subject-meta">
                       <span><i class="fas fa-layer-group"></i> {{ subject.credits }} tín chỉ</span>
@@ -141,8 +141,8 @@
             <!-- Classes Tab -->
              <div v-else-if="teacherClasses.length > 0" class="classes-list">
               <div v-for="cls in teacherClasses" :key="cls.id" class="class-card">
-                  <div class="class-info">
-                  <h5>{{ cls.name || cls.code || 'Chưa đặt tên' }}</h5>
+                <div class="class-info">
+                  <h5>{{ cls.name }}</h5>
                   <p class="class-code">{{ cls.code }}</p>
                   <div class="class-meta">
                     <span><i class="fas fa-users"></i> {{ cls.studentCount }} Sinh viên</span>
@@ -323,7 +323,6 @@ export default {
     
     const tabs = [
       { id: 'personal', name: 'Thông tin cá nhân', icon: 'fas fa-user' },
-      { id: 'subjects', name: 'Môn học', icon: 'fas fa-book-open' }, // Course Classes
       { id: 'classes', name: 'Lớp chủ nhiệm', icon: 'fas fa-users' }, // Office Classes
       { id: 'schedule', name: 'Lịch giảng dạy', icon: 'fas fa-calendar' },
       { id: 'statistics', name: 'Thống kê', icon: 'fas fa-chart-bar' }

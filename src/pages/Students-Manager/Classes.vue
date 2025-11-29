@@ -144,12 +144,6 @@
             </div>
 
             <div class="class-stats">
-              <div class="stat-item">
-                <i class="fas fa-users"></i>
-                <span>
-                  {{ officialClass.studentCount || 0 }}
-                </span>
-              </div>
               <div class="progress-bar">
                 <div
                   class="progress-fill"
