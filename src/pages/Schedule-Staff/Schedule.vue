@@ -276,71 +276,64 @@ setup() {
 
     // --- ENRICH DATA FUNCTION ---
   const enrichSchedule = (s) => {
-      if (!s) return s
-      const out = { ...s }
+  if (!s) return s
+  const out = { ...s }
 
-      // 1. Chuẩn hóa các trường cơ bản (API có thể trả về snake_case)
-      out.id = out.id || out.schedule_id || out.scheduleId
-      const subjectId = out.courseClassId || out.course_class_id || out.subjectId || out.subject_id
-      const teacherId = out.teacherId || out.teacher_id
-      const roomId = out.roomId || out.room_id
-      
-      out.startDate = out.startDate || out.start_date
-      out.endDate = out.endDate || out.end_date
-      out.scheduleType = out.scheduleType || out.schedule_type || (out.type === 'exam' ? 'exam' : 'study')
-      out.repeatType = out.repeatType || out.repeat_type || 'weekly'
-      out.repeatInterval = out.repeatInterval || out.repeat_weeks || 1
-      out.notes = out.notes || ''
+  // Chuẩn hóa ID và các field cơ bản
+  out.id = out.id || out.schedule_id || out.scheduleId
+  // Lưu ý: api thường trả về course_class_id cho môn học
+  const subjectId = out.courseClassId || out.course_class_id || out.subjectId || out.subject_id
+  const teacherId = out.teacherId || out.teacher_id
+  const roomId = out.roomId || out.room_id
+  
+  out.startDate = out.startDate || out.start_date
+  out.endDate = out.endDate || out.end_date
+  out.scheduleType = out.scheduleType || out.schedule_type || (out.type === 'exam' ? 'exam' : 'study')
+  out.repeatType = out.repeatType || out.repeat_type || 'weekly'
+  out.repeatInterval = out.repeatInterval || out.repeat_weeks || 1
+  out.notes = out.notes || ''
 
-      // 2. Map Tên từ danh mục (Xử lý ID dạng chuỗi/số)
-      // Tìm subject: So sánh lỏng (==) để '1' khớp với 1
-      const sub = Object.values(subjectMap.value).find(x => x.id == subjectId)
+  // --- Map Tên (Môn, GV, Phòng) ---
+  // Dùng == để so sánh lỏng (ví dụ "1" == 1)
+  const sub = Object.values(subjectMap.value).find(x => x.id == subjectId)
 
-      // Tên Môn học
-      if (sub) {
-        out.subjectName = sub.name
-        out.subjectCode = sub.code
-        out.subjectId = sub.id // Gán lại ID chuẩn
-      } else {
-        out.subjectName = out.subjectName || out.subject_name || out.CourseClass?.name || ''
-        out.subjectCode = out.subjectCode || out.subject_code || out.CourseClass?.code || ''
-        out.subjectId = subjectId // Giữ nguyên nếu không tìm thấy
-      }
+  // Tên Môn học
+  if (sub) {
+    out.subjectName = sub.name
+    out.subjectCode = sub.code
+    out.subjectId = sub.id
+  } else {
+    // Fallback nếu không tìm thấy trong danh sách (lấy từ object lồng nhau nếu có)
+    out.subjectName = out.subjectName || out.subject_name || out.CourseClass?.name || ''
+    out.subjectCode = out.subjectCode || out.subject_code || out.CourseClass?.code || ''
+    out.subjectId = subjectId 
+  }
 
-      // Tên Giáo viên (Ưu tiên trong lịch -> Fallback sang môn học)
-      const tId = teacherId || (sub ? sub.teacherId : null)
-      const t = Object.values(teacherMap.value).find(x => x.id == tId || x.teacherId == tId)
-      
-      if (t) {
-        out.teacherName = t.name
-        out.teacherId = t.id
-      } else {
-        out.teacherName = out.teacherName || out.teacher_name || (out.Teacher?.name) || (sub ? sub.teacherName : '')
-      }
+  // Tên Giáo viên
+  const tId = teacherId || (sub ? sub.teacherId : null)
+  const t = Object.values(teacherMap.value).find(x => x.id == tId || x.teacherId == tId)
+  out.teacherName = t ? t.name : (out.teacherName || out.teacher_name || out.Teacher?.name || (sub ? sub.teacherName : ''))
+  out.teacherId = t ? t.id : tId
 
-      // Tên Phòng
-      const rId = roomId || (sub ? sub.roomId : null)
-      const r = Object.values(roomMap.value).find(x => x.id == rId)
-      
-      if (r) {
-        out.roomName = r.name
-        out.roomId = r.id
-      } else {
-        out.roomName = out.roomName || out.room_name || (out.Room?.name) || (sub ? sub.roomName : '')
-      }
+  // Tên Phòng
+  const rId = roomId || (sub ? sub.roomId : null)
+  const r = Object.values(roomMap.value).find(x => x.id == rId)
+  out.roomName = r ? r.name : (out.roomName || out.room_name || out.Room?.name || (sub ? sub.roomName : ''))
+  out.roomId = r ? r.id : rId
 
-      // 3. Chuẩn hóa danh sách ngày học (Quan trọng cho Modal Sửa)
-      // API có thể trả về: scheduleDays, schedule_days, CourseScheduleDays
-      let rawDays = out.scheduleDays || out.schedule_days || out.CourseScheduleDays || []
-      if (!Array.isArray(rawDays)) rawDays = []
-      
-      out.scheduleDays = rawDays.map(day => ({
-        day: day.day || day.dayOfWeek || day.weekdayId || day.weekday_id, // Lấy thứ (2,3,4...)
-        slots: day.slots || day.timeSlots || day.time_slots || [] // Lấy tiết [1,2,3]
-      }))
+  // --- Xử lý danh sách ngày học (Fix lỗi form sửa trống) ---
+  // API có thể trả về nhiều kiểu tên: scheduleDays, schedule_days, CourseScheduleDays
+  let rawDays = out.scheduleDays || out.schedule_days || out.CourseScheduleDays || []
+  if (!Array.isArray(rawDays)) rawDays = []
+  
+  out.scheduleDays = rawDays.map(day => ({
+    // Kiểm tra đủ các trường hợp tên biến của Backend
+    day: day.day || day.dayOfWeek || day.day_of_week || day.weekdayId || day.weekday_id, 
+    slots: day.slots || day.timeSlots || day.time_slots || [] 
+  }))
 
-      return out
-    }
+  return out
+}
 
     const enrichedClassSchedules = computed(() => classSchedules.value.map(enrichSchedule))
     const enrichedExamSchedules = computed(() => examSchedules.value.map(enrichSchedule))
@@ -487,15 +480,24 @@ setup() {
       scheduleType.value === 'exam' ? (showExamModal.value = true) : (showScheduleModal.value = true)
     }
 
-    const editSchedule = async (s) => {
-      try {
-        const id = s.scheduleId || s.parentId || s.id
-        const res = await fetchCourseSchedule(id)
-        editingSchedule.value = enrichSchedule(res)
-        isEditMode.value = true
-        showScheduleModal.value = true
-      } catch (e) { error('Lỗi tải chi tiết lịch') }
-    }
+   const editSchedule = async (s) => {
+  try {
+    const id = s.scheduleId || s.parentId || s.id
+    const res = await fetchCourseSchedule(id)
+    
+    // FIX QUAN TRỌNG: Lấy dữ liệu từ res.data nếu có wrapper
+    const rawData = res.data || res 
+    
+    console.log('API Edit Response:', rawData) // Debug để xem data trả về
+    editingSchedule.value = enrichSchedule(rawData)
+    
+    isEditMode.value = true
+    showScheduleModal.value = true
+  } catch (e) {
+    console.error(e)
+    error('Lỗi tải chi tiết lịch')
+  }
+}
 
     const editExam = async (e) => {
       try {
@@ -557,25 +559,40 @@ setup() {
       } catch (e) { error('Lỗi xóa lịch') }
     }
 
-   const viewScheduleDetails = async (s) => {
+    const viewScheduleDetails = async (s) => {
       try {
+        // BƯỚC 1: Hiển thị ngay lập tức dữ liệu từ danh sách (đang đúng)
+        // Việc này đảm bảo Modal luôn có Tên môn, GV, Phòng ngay khi mở
+        const baseData = enrichSchedule(s)
+        viewingSchedule.value = { ...baseData }
+        viewingType.value = s.type === 'exam' || s.scheduleType === 'exam' ? 'exam' : 'class'
+        showDetailsModal.value = true // Mở modal ngay
+
+        // BƯỚC 2: Gọi API lấy thêm chi tiết (nếu cần description, ds sinh viên...)
         const id = s.scheduleId || s.parentId || s.id
-        const res = await fetchCourseSchedule(id)
-        const rawData = res.data || res 
-        
-        viewingSchedule.value = enrichSchedule({
-          ...rawData,
-          // Giữ lại thông tin ngày/giờ của slot đang click vào (nếu có)
-          date: s.date || rawData.startDate || rawData.start_date,
-          startTime: s.startTime,
-          endTime: s.endTime
-        })
-        
-        viewingType.value = s.type === 'exam' ? 'exam' : 'class'
-        showDetailsModal.value = true
+        if (id) {
+            const res = await fetchCourseSchedule(id)
+            const rawData = res.data || res 
+            const enrichedDetail = enrichSchedule(rawData)
+            
+            // BƯỚC 3: Merge thông minh
+            // Chỉ ghi đè các field chi tiết, giữ nguyên thông tin hiển thị cơ bản nếu API trả về null
+            viewingSchedule.value = {
+                ...viewingSchedule.value, // Giữ thông tin cũ
+                ...enrichedDetail,        // Ghi đè thông tin mới
+                // Khôi phục lại Subject/Teacher/Room Name nếu API chi tiết bị thiếu
+                subjectName: enrichedDetail.subjectName || viewingSchedule.value.subjectName,
+                teacherName: enrichedDetail.teacherName || viewingSchedule.value.teacherName,
+                roomName: enrichedDetail.roomName || viewingSchedule.value.roomName,
+                // Quan trọng: Giữ nguyên ngày giờ của slot đang click (không dùng ngày bắt đầu của cả chuỗi lịch)
+                date: s.date || enrichedDetail.startDate,
+                startTime: s.startTime || enrichedDetail.startTime,
+                endTime: s.endTime || enrichedDetail.endTime
+            }
+        }
       } catch (e) { 
-        console.error(e)
-        error('Lỗi xem chi tiết') 
+        console.error('Lỗi tải chi tiết:', e)
+        // Không show error toast vì người dùng vẫn xem được thông tin cơ bản
       }
     }
 

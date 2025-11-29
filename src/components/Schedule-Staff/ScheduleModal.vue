@@ -557,81 +557,90 @@ export default {
       return String(w)
     }
 
-    const loadScheduleData = () => {
-      // Reset state trước khi load
-      scheduleDays.value = []
-      selectedDays.value = []
-      dayScheduleData.value = {}
-      currentEditingDay.value = ''
+    // Thay thế hàm loadScheduleData cũ bằng hàm này:
 
-      if (props.schedule) {
-        const s = props.schedule
-        console.log('Loading schedule to modal:', s) // Debug
+const loadScheduleData = () => {
+  // Reset state
+  scheduleDays.value = []
+  selectedDays.value = []
+  dayScheduleData.value = {}
+  currentEditingDay.value = ''
 
-        // 1. Map fields
-        formData.value.subjectId = s.subjectId
-        formData.value.scheduleType = s.scheduleType
-        formData.value.groupId = s.groupId || ''
-        formData.value.startDate = s.startDate ? s.startDate.split('T')[0] : '' // Chỉ lấy YYYY-MM-DD
-        formData.value.endDate = s.endDate ? s.endDate.split('T')[0] : ''
-        formData.value.repeatType = s.repeatType
-        formData.value.repeatInterval = s.repeatInterval
-        formData.value.status = s.status || 'scheduled'
-        formData.value.notes = s.notes || ''
+  if (props.schedule) {
+    const s = props.schedule
+    console.log('Modal received:', s) // Debug
 
-        // 2. Map Schedule Days (Danh sách ngày và tiết)
-        if (s.scheduleDays && Array.isArray(s.scheduleDays)) {
-          // Lưu vào state hiển thị danh sách bên phải
-          // Cần tính toán lại slotsText và duration
-          scheduleDays.value = s.scheduleDays.map(d => {
-            const dayStr = apiDayToModalDay(d.day)
-            const slotArr = Array.isArray(d.slots) ? d.slots.map(String) : []
-            return {
-              day: dayStr,
-              slots: slotArr,
-              slotsText: slotArr.map(sl => `Tiết ${sl}`).join(', '), // Hiển thị đơn giản
-              duration: slotArr.length * 45
-            }
-          }).filter(d => d.day) // Lọc bỏ ngày null
+    // 1. Map fields (Chuyển đổi type an toàn)
+    // subjectId cần khớp type với value trong <option> (thường là number)
+    // Nếu s.subjectId là string "1" mà option value là number 1, v-model có thể không nhận.
+    formData.value.subjectId = s.subjectId
+    
+    formData.value.scheduleType = s.scheduleType || 'study'
+    formData.value.groupId = s.groupId || ''
+    
+    // Cắt chuỗi ngày (YYYY-MM-DD) nếu API trả về full datetime ISO
+    formData.value.startDate = s.startDate ? String(s.startDate).split('T')[0] : ''
+    formData.value.endDate = s.endDate ? String(s.endDate).split('T')[0] : ''
+    
+    formData.value.repeatType = s.repeatType || 'weekly'
+    formData.value.repeatInterval = s.repeatInterval || 1
+    formData.value.status = s.status || 'scheduled'
+    formData.value.notes = s.notes || ''
 
-          // Map vào state chỉnh sửa (selectedDays và dayScheduleData)
-          const loadedDays = []
-          const loadedData = {}
-          
-          scheduleDays.value.forEach(item => {
-            if (!loadedDays.includes(item.day)) {
-              loadedDays.push(item.day)
-            }
-            loadedData[item.day] = item.slots
-          })
-
-          selectedDays.value = loadedDays
-          dayScheduleData.value = loadedData
-          
-          if (loadedDays.length > 0) {
-            currentEditingDay.value = loadedDays[0]
-          }
+    // 2. Map Schedule Days
+    if (s.scheduleDays && Array.isArray(s.scheduleDays)) {
+      // Dữ liệu hiển thị danh sách bên phải
+      scheduleDays.value = s.scheduleDays.map(d => {
+        const dayStr = apiDayToModalDay(d.day)
+        const slotArr = Array.isArray(d.slots) ? d.slots.map(String) : []
+        return {
+          day: dayStr,
+          slots: slotArr,
+          slotsText: slotArr.map(sl => `Tiết ${sl}`).join(', '),
+          duration: slotArr.length * 45
         }
+      }).filter(d => d.day) // Lọc bỏ ngày null
 
-        // Trigger để hiện tên môn học/phòng
-        if (formData.value.subjectId) {
-            handleSubjectChange()
+      // Dữ liệu cho form chỉnh sửa (checkboxes)
+      const loadedDays = []
+      const loadedData = {}
+      
+      scheduleDays.value.forEach(item => {
+        if (!loadedDays.includes(item.day)) {
+          loadedDays.push(item.day)
         }
-      } else {
-        // Create Mode: Reset sạch form
-        formData.value = {
-          subjectId: '',
-          scheduleType: props.scheduleType || 'study',
-          groupId: '',
-          startDate: '',
-          endDate: '',
-          repeatType: 'weekly',
-          repeatInterval: 1,
-          status: 'scheduled',
-          notes: ''
-        }
+        // Map slot về mảng string để so sánh checkbox
+        loadedData[item.day] = item.slots.map(String)
+      })
+
+      selectedDays.value = loadedDays
+      dayScheduleData.value = loadedData
+      
+      if (loadedDays.length > 0) {
+        currentEditingDay.value = loadedDays[0]
       }
     }
+
+    // Trigger để hiện tên môn/phòng/gv
+    if (formData.value.subjectId) {
+        // Dùng setTimeout để đảm bảo DOM đã update hoặc subjects prop đã sẵn sàng
+        setTimeout(() => handleSubjectChange(), 0)
+    }
+  } else {
+    // Reset form for Create Mode
+    formData.value = {
+      subjectId: '',
+      scheduleType: props.scheduleType || 'study',
+      groupId: '',
+      startDate: '',
+      endDate: '',
+      repeatType: 'weekly',
+      repeatInterval: 1,
+      status: 'scheduled',
+      notes: ''
+    }
+  }
+}
 
     // Initialize form data for edit mode
     loadScheduleData()
