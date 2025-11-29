@@ -121,58 +121,39 @@
             </div>
             
             <!-- Subjects Tab -->
-            <div v-if="activeTab === 'subjects'" class="tab-panel">
-  <div class="subjects-section">
-    <div class="section-header">
-      <h4>Danh sách môn học đang giảng dạy</h4>
-      <div class="section-actions">
-        <button @click="refreshSubjects" class="btn-refresh" :disabled="isLoadingSubjects">
-          <i class="fas" :class="isLoadingSubjects ? 'fa-spinner fa-spin' : 'fa-sync'"></i>
-          {{ isLoadingSubjects ? 'Đang tải...' : 'Làm mới' }}
-        </button>
-      </div>
-    </div>
-    
-    <div v-if="isLoadingSubjects" class="loading-state">
-       <i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu môn học...
-    </div>
-
-    <div v-else-if="teacherSubjects.length > 0" class="subjects-list">
-      </div>
-    
-    <div v-else class="empty-subjects">
-      <i class="fas fa-book-open"></i>
-      <p>Chưa có môn học nào được phân công</p>
-    </div>
-  </div>
-</div>
+             <div v-else-if="teacherSubjects.length > 0" class="subjects-list">
+                <div v-for="subject in teacherSubjects" :key="subject.id" class="subject-card">
+                  <div class="subject-info">
+                    <h5>{{ subject.name || subject.code || 'Chưa đặt tên' }}</h5>
+                    <p class="subject-code">{{ subject.code }}</p>
+                    <div class="subject-meta">
+                      <span><i class="fas fa-layer-group"></i> {{ subject.credits }} tín chỉ</span>
+                      <span><i class="fas fa-user-graduate"></i> {{ subject.studentCount }} SV</span>
+                      <span><i class="fas fa-clock"></i> {{ subject.semesterName }}</span>
+                    </div>
+                  </div>
+                  <button class="btn-action" @click="viewSubject(subject)" title="Xem chi tiết">
+                    <i class="fas fa-arrow-right"></i>
+                  </button>
+                </div>
+              </div>
             
             <!-- Classes Tab -->
-            <div v-if="activeTab === 'classes'" class="tab-panel">
-  <div class="classes-section">
-    <div class="section-header">
-      <h4>Danh sách lớp phụ trách</h4>
-      <div class="section-actions">
-        <button @click="refreshClasses" class="btn-refresh" :disabled="isLoadingClasses">
-          <i class="fas" :class="isLoadingClasses ? 'fa-spinner fa-spin' : 'fa-sync'"></i>
-          {{ isLoadingClasses ? 'Đang tải...' : 'Làm mới' }}
-        </button>
-      </div>
-    </div>
-
-    <div v-if="isLoadingClasses" class="loading-state">
-       <i class="fas fa-spinner fa-spin"></i> Đang tải danh sách lớp...
-    </div>
-    
-    <div v-else-if="teacherClasses.length > 0" class="classes-list">
-      </div>
-    
-    <div v-else class="empty-classes">
-      <i class="fas fa-users"></i>
-      <p>Chưa có lớp nào được phân công</p>
-    </div>
-  </div>
-</div>
+             <div v-else-if="teacherClasses.length > 0" class="classes-list">
+              <div v-for="cls in teacherClasses" :key="cls.id" class="class-card">
+                  <div class="class-info">
+                  <h5>{{ cls.name || cls.code || 'Chưa đặt tên' }}</h5>
+                  <p class="class-code">{{ cls.code }}</p>
+                  <div class="class-meta">
+                    <span><i class="fas fa-users"></i> {{ cls.studentCount }} Sinh viên</span>
+                    <span><i class="fas fa-calendar-alt"></i> Khóa: {{ cls.year }}</span>
+                  </div>
+                </div>
+                <button class="btn-action" @click="viewClass(cls)" title="Xem danh sách lớp">
+                  <i class="fas fa-list"></i>
+                </button>
+              </div>
+            </div>
             
             <!-- Schedule Tab -->
             <div v-if="activeTab === 'schedule'" class="tab-panel">
@@ -283,6 +264,7 @@ import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoade
 // Import Services
 import courseClassService from '@/services/courseClassService'
 import officeClassService from '@/services/officeClassService'
+import { mapOfficeClass } from '@/types/officeClass'
 
 export default {
   name: 'TeacherViewModal',
@@ -414,13 +396,14 @@ export default {
 
         teacherSubjects.value = itemsList.map(item => ({
           id: item._id || item.id,
-          name: item.course_name || item.Course?.name || 'Chưa đặt tên', // Tên môn học
-          code: item.course_code || item.Course?.code || item.code, // Mã học phần
-          credits: item.credits || item.Course?.credits || 0,
-          studentCount: item.student_count || item.total_students || 0,
-          semesterName: item.semester_name || item.Semester?.name || 'N/A'
+          name: item.course_name || item.Course?.name || item.Course?.course_name || item.course?.name || item.course?.course_name || item.Course?.Course?.name || item.course?.Course?.name || item.Course?.Subject?.name || item.Course?.Subject?.subject_name || item.Subject?.name || item.subject?.subject_name || item.subject?.name || item.name || item.title || item.courseName || item.Course?.display || item.course?.display || 'Chưa đặt tên', // many fallbacks
+          code: item.course_code || item.Course?.code || item.code || item.course?.code || item.courseCode || item.Course?.course_code || item.Course?.Course?.code || item.course?.Course?.code || '', // Mã học phần
+          credits: item.credits || item.Course?.credits || item.course?.credits || item.credit || 0,
+          studentCount: item.student_count || item.total_students || item.students?.length || item.studentCount || 0,
+          semesterName: item.semester_name || item.Semester?.name || item.semester?.name || 'N/A'
         }))
         console.log('[TeacherViewModal] teacherSubjects mapped count:', teacherSubjects.value.length)
+        if (itemsList.length > 0) console.log('[TeacherViewModal] first raw subject', itemsList[0], 'first mapped', teacherSubjects.value[0])
       } catch (error) {
         console.error('Failed to load teacher subjects:', error)
         // Có thể thêm toast notification ở đây
@@ -448,14 +431,17 @@ export default {
         console.log('[TeacherViewModal] loadTeacherClasses response:', response)
         console.log('[TeacherViewModal] loadTeacherClasses itemsList length:', itemsList.length)
 
-        teacherClasses.value = itemsList.map(item => ({
-          id: item._id || item.id,
-          name: item.name,
-          code: item.code,
-          studentCount: item.student_count || item.students?.length || 0,
-          year: item.academic_year || item.year || 'N/A'
+        // Normalize mapping using mapOfficeClass helper to handle nested/varied shapes
+        const mappedClasses = itemsList.map(item => mapOfficeClass(item))
+        teacherClasses.value = mappedClasses.map(c => ({
+          id: c.id,
+          name: c.name || c.code || `Lớp ${c.id}`,
+          code: c.code || c.id,
+          studentCount: c.studentCount || 0,
+          year: c.academicYearName || c.academic_year_id || c.course || 'N/A'
         }))
         console.log('[TeacherViewModal] teacherClasses mapped count:', teacherClasses.value.length)
+        if (itemsList.length > 0) console.log('[TeacherViewModal] teacherClasses first mapped:', teacherClasses.value[0], 'first raw:', itemsList[0])
       } catch (error) {
         console.error('Failed to load teacher office classes:', error)
       } finally {
