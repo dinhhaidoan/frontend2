@@ -230,6 +230,54 @@ export function parseISODateToLocal(dateIso) {
 }
 
 /**
+ * Normalize any date-ish string or Date to an HTML date input value (yyyy-mm-dd)
+ * Accepts full ISO strings with time and timezones, Date objects, unix timestamps
+ */
+export function toInputDate(value) {
+  if (!value) return ''
+  try {
+    // if already yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+    // ISO with time: take date part
+    if (typeof value === 'string' && value.includes('T')) {
+      const iso = value.split('T')[0]
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+    }
+    // Date object
+    const d = (typeof value === 'string' && !isNaN(Date.parse(value))) ? new Date(value) : (value instanceof Date ? value : null)
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      return `${yyyy}-${mm}-${dd}`
+    }
+    // number timestamp
+    const num = Number(value)
+    if (!Number.isNaN(num)) {
+      const ts = String(value).length === 10 ? num * 1000 : num
+      const dd2 = new Date(ts)
+      if (!isNaN(dd2.getTime())) {
+        const yyyy = dd2.getFullYear()
+        const mm = String(dd2.getMonth() + 1).padStart(2, '0')
+        const dd = String(dd2.getDate()).padStart(2, '0')
+        return `${yyyy}-${mm}-${dd}`
+      }
+    }
+    // dd/mm/yyyy
+    const m = String(value).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+    if (m) {
+      const ddd = m[1].padStart(2, '0')
+      const mmm = m[2].padStart(2, '0')
+      const yyyy = m[3]
+      return `${yyyy}-${mmm}-${ddd}`
+    }
+  } catch (err) {
+    console.warn('toInputDate failed for', value, err)
+  }
+  return ''
+}
+
+/**
  * Compute semester status by dates (client-side).
  * - 'upcoming' if now < start
  * - 'active' if start <= now <= end

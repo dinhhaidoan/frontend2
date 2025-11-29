@@ -49,6 +49,8 @@
     <StudentModal
       :isOpen="showStudentModal"
       :student="selectedStudent"
+      :uploading="uploadInProgress"
+      :upload-progress="uploadProgress"
       @close="closeStudentModal"
       @submit="handleSubmitStudent"
     />
@@ -71,8 +73,7 @@
       :show="deleteStudentModalVisible"
       type="danger"
       title="Xác nhận xóa sinh viên"
-      :message="studentToDelete ? `Bạn có chắc muốn xóa sinh viên ${studentToDelete.fullName || studentToDelete.studentCode}? Hành động này không thể hoàn tác.` : 'Bạn có chắc muốn xóa sinh viên này?'
-      "
+      :message="deleteStudentMessage"
       confirmText="Xóa"
       cancelText="Hủy"
       @confirm="confirmDeleteStudent"
@@ -84,8 +85,7 @@
       :show="updateStudentModalVisible"
       type="warning"
       title="Xác nhận cập nhật thông tin sinh viên"
-      :message="studentToUpdate ? `Bạn có chắc chắn muốn cập nhật thông tin sinh viên ${studentToUpdate.fullName || studentToUpdate.studentCode}?` : 'Bạn có chắc chắn muốn cập nhật thông tin sinh viên này?'
-      "
+      :message="updateStudentMessage"
       confirmText="Xác nhận"
       cancelText="Hủy"
       @confirm="confirmUpdateStudent"
@@ -96,6 +96,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import parentStudentService from '@/services/parentStudentService'
+import { watch } from 'vue'
+import { useUsers } from '@/hooks/useUsers'
 import StudentStats from '@/components/Students-Manager/StudentStats.vue'
 import StudentFilters from '@/components/Students-Manager/StudentFilters.vue'
 import StudentTable from '@/components/Students-Manager/StudentTable.vue'
@@ -106,6 +109,7 @@ import ImportModal from '@/components/Students-Manager/ImportModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 // State
+const { accounts, fetchUsers, createUser, updateUser, deleteUser } = useUsers()
 const students = ref([])
 const selectedStudents = ref([])
 const filters = ref({})
@@ -123,148 +127,104 @@ const updateStudentModalVisible = ref(false)
 const studentToUpdate = ref(null)
 const selectedStudent = ref(null)
 
-// Mock data - Replace with API calls
-const mockStudents = [
-  {
-    id: 1,
-    studentCode: '2251052001',
-    fullName: 'Nguyễn Văn A',
-    email: 'nguyenvana@student.edu.vn',
-    phoneNumber: '0123456789',
-    dateOfBirth: '2004-01-15',
-    gender: 'male',
-    identityCard: '001234567890',
-    address: 'TP. Hồ Chí Minh',
-    birthPlace: 'TP. HCM',
-    major: 'IT',
-    course: '2022',
-    officialClass: '22IT1',
-    status: 'studying',
-    gpa: 3.5,
-    credits: 108,
-    completedSubjects: 27,
-    retakeSubjects: 0,
-    advisorId: 1,
-    advisorName: 'TS. Nguyễn Văn A',
-    enrollmentDate: '2022-09-01',
-    expectedGraduationYear: '2026',
-    parentName: 'Nguyễn Văn B',
-    parentPhone: '0987654321',
-    avatar: null
-  },
-  {
-    id: 2,
-    studentCode: '2251052002',
-    fullName: 'Trần Thị B',
-    email: 'tranthib@student.edu.vn',
-    phoneNumber: '0987654321',
-    dateOfBirth: '2004-05-20',
-    gender: 'female',
-    identityCard: '001234567891',
-    address: 'Hà Nội',
-    birthPlace: 'Hà Nội',
-    major: 'IT',
-    course: '2022',
-    officialClass: '22IT1',
-    status: 'studying',
-    gpa: 3.8,
-    credits: 112,
-    completedSubjects: 28,
-    retakeSubjects: 0,
-    advisorId: 1,
-    advisorName: 'TS. Nguyễn Văn A',
-    enrollmentDate: '2022-09-01',
-    expectedGraduationYear: '2026',
-    parentName: 'Trần Văn C',
-    parentPhone: '0912345678',
-    avatar: null
-  },
-  {
-    id: 3,
-    studentCode: '2351052001',
-    fullName: 'Lê Văn C',
-    email: 'levanc@student.edu.vn',
-    phoneNumber: '0369852147',
-    dateOfBirth: '2005-03-10',
-    gender: 'male',
-    identityCard: '001234567892',
-    address: 'Đà Nẵng',
-    birthPlace: 'Đà Nẵng',
-    major: 'CS',
-    course: '2023',
-    officialClass: '23IT1',
-    status: 'studying',
-    gpa: 3.2,
-    credits: 70,
-    completedSubjects: 18,
-    retakeSubjects: 1,
-    advisorId: 2,
-    advisorName: 'ThS. Trần Thị B',
-    enrollmentDate: '2023-09-01',
-    expectedGraduationYear: '2027',
-    parentName: 'Lê Văn D',
-    parentPhone: '0978456123',
-    avatar: null
-  },
-  {
-    id: 4,
-    studentCode: '2251052003',
-    fullName: 'Phạm Thị D',
-    email: 'phamthid@student.edu.vn',
-    phoneNumber: '0147258369',
-    dateOfBirth: '2004-07-25',
-    gender: 'female',
-    identityCard: '001234567893',
-    address: 'Cần Thơ',
-    birthPlace: 'Cần Thơ',
-    major: 'IT',
-    course: '2022',
-    officialClass: '22IT2',
-    status: 'reserved',
-    gpa: 2.8,
-    credits: 90,
-    completedSubjects: 22,
-    retakeSubjects: 2,
-    advisorId: 3,
-    advisorName: 'TS. Lê Văn C',
-    enrollmentDate: '2022-09-01',
-    expectedGraduationYear: '2027',
-    parentName: 'Phạm Văn E',
-    parentPhone: '0935678912',
-    avatar: null
-  },
-  {
-    id: 5,
-    studentCode: '2451052001',
-    fullName: 'Hoàng Văn E',
-    email: 'hoangvane@student.edu.vn',
-    phoneNumber: '0258147369',
-    dateOfBirth: '2006-11-05',
-    gender: 'male',
-    identityCard: '001234567894',
-    address: 'Hải Phòng',
-    birthPlace: 'Hải Phòng',
-    major: 'DS',
-    course: '2024',
-    officialClass: '24IT1',
-    status: 'studying',
-    gpa: 3.9,
-    credits: 22,
-    completedSubjects: 5,
-    retakeSubjects: 0,
-    advisorId: 4,
-    advisorName: 'PGS.TS. Phạm Thị D',
-    enrollmentDate: '2024-09-01',
-    expectedGraduationYear: '2028',
-    parentName: 'Hoàng Văn F',
-    parentPhone: '0923456789',
-    avatar: null
+const deleteStudentMessage = computed(() => {
+  return studentToDelete.value
+    ? `Bạn có chắc muốn xóa sinh viên ${studentToDelete.value.fullName || studentToDelete.value.studentCode}? Hành động này không thể hoàn tác.`
+    : 'Bạn có chắc muốn xóa sinh viên này?'
+})
+
+// upload state for avatar handling
+const uploadInProgress = ref(false)
+const uploadProgress = ref(0)
+
+const updateStudentMessage = computed(() => {
+  return studentToUpdate.value
+    ? `Bạn có chắc chắn muốn cập nhật thông tin sinh viên ${studentToUpdate.value.fullName || studentToUpdate.value.studentCode}?`
+    : 'Bạn có chắc chắn muốn cập nhật thông tin sinh viên này?'
+})
+
+// Note: load students from backend via `useUsers().fetchUsers()`
+// when refresh is needed, accounts (from the store) will contain the list.
+// We will map `accounts` to the UI fields.
+
+const mapAccountToStudent = (u) => {
+  const s = u.raw?.Student || {}
+  return {
+    id: s.student_id || u.id || u.raw?.user_id,
+    studentCode: s.student_code || u.userId || u.raw?.user_code,
+    userCode: u.userId || u.raw?.user_code || (s.user_code || null),
+    fullName: s.student_name || u.name || u.raw?.user_fullname || u.raw?.user_code,
+    email: u.email || u.raw?.user_email || '',
+    phoneNumber: u.phone || u.raw?.user_phone || '',
+    dateOfBirth: s.student_birthdate || '',
+    gender: s.student_gender || '',
+    identityCard: s.student_CCCD || '',
+    address: s.student_address || '',
+    birthPlace: s.student_place_of_birth || '',
+    major: s.major || s.major_id || '',
+    course: s.academic_year_id || s.course || s.raw?.Student?.academic_year_id || '',
+    officialClass: s.office_class_id || s.officialClass || '',
+    status: s.student_active ? 'studying' : 'inactive',
+    gpa: s.gpa || 0,
+    credits: s.credits || 0,
+    completedSubjects: s.completedSubjects || 0,
+    retakeSubjects: s.retakeSubjects || 0,
+    advisorId: s.advisor_id || s.advisorId || '',
+    advisorName: s.advisor_name || '',
+    enrollmentDate: s.student_day_joined || s.enrollmentDate || '',
+    expectedGraduationYear: s.student_year_expected || '',
+    parents: s.parents || s.ParentStudents || s.parent_students || (u.raw && (u.raw.parents || u.raw.ParentStudents || u.raw.parent_students)) || [],
+    parentName: (s.parents && s.parents[0] && (s.parents[0].parent_name || s.parents[0].name)) || (s.ParentStudents && s.ParentStudents[0] && s.ParentStudents[0].parent_name) || (s.parent_students && s.parent_students[0] && s.parent_students[0].parent_name) || '',
+    parentPhone: (s.parents && s.parents[0] && (s.parents[0].parent_contact || s.parents[0].contact || s.parents[0].parent_phone)) || (s.ParentStudents && s.ParentStudents[0] && s.ParentStudents[0].parent_contact) || (s.parent_students && s.parent_students[0] && s.parent_students[0].parent_contact) || '',
+    avatar: u.avatar || u.raw?.user_avatar || null,
+    raw: u.raw || u
   }
-]
+}
+
+// upload helpers - copied from StaffManager pattern
+const uploadWithProgress = (url, file, onProgress, opts = {}) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url, true)
+      xhr.withCredentials = true
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { return resolve(JSON.parse(xhr.responseText || '{}')) } catch (e) { return resolve({}) }
+        }
+        return reject(new Error(`${xhr.status} ${xhr.statusText}: ${xhr.responseText || ''}`))
+      }
+      xhr.onerror = () => reject(new Error('Network error during upload'))
+      if (xhr.upload && typeof xhr.upload.onprogress !== 'undefined') {
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)) }
+      }
+      const fieldName = opts.fieldName || 'file'
+      const fd = new FormData()
+      fd.append(fieldName, file)
+      if (opts.extra && typeof opts.extra === 'object') {
+        for (const k of Object.keys(opts.extra)) fd.append(k, opts.extra[k])
+      }
+      xhr.send(fd)
+    } catch (e) { reject(e) }
+  })
+}
+
+const uploadImageToCloudinary = async (file, onProgress = null) => {
+  if (!file) return null
+  const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || ''
+  const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
+  if (!CLOUD || !PRESET || CLOUD.includes('YOUR_')) {
+    throw new Error('Cloudinary không được cấu hình (VITE_CLOUDINARY_CLOUD_NAME / UPLOAD_PRESET)')
+  }
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`
+  const res = await uploadWithProgress(url, file, onProgress, { fieldName: 'file', extra: { upload_preset: PRESET } })
+  return res
+}
 
 // Computed
 const statistics = computed(() => {
-  const total = students.value.length
+  const list = students.value
+  const total = list.length
   const studying = students.value.filter((s) => s.status === 'studying').length
   const reserved = students.value.filter((s) => s.status === 'reserved').length
   const graduated = students.value.filter((s) => s.status === 'graduated').length
@@ -368,9 +328,32 @@ const paginatedStudents = computed(() => {
 })
 
 // Methods
-const loadStudents = () => {
-  students.value = mockStudents
+const loadStudents = async () => {
+  try {
+    await fetchUsers()
+    // Map only student accounts to student items
+    const studentAccounts = (accounts.value || []).filter((a) => {
+      if (a && a.role) return a.role === 'student'
+      const roleName = a?.raw?.Role?.role_name || a?.raw?.role_name || ''
+      return roleName.toString().toLowerCase().includes('sinh') || roleName.toString().toLowerCase() === 'student'
+    })
+    students.value = studentAccounts.map(mapAccountToStudent)
+  } catch (err) {
+    console.error('Error loading students', err)
+    students.value = []
+  }
 }
+
+// Keep students map updated when accounts change
+// Update student list when accounts change; only include student-role users
+watch(accounts, (newVal) => {
+  const studentAccounts = (newVal || []).filter((a) => {
+    if (a && a.role) return a.role === 'student'
+    const roleName = a?.raw?.Role?.role_name || a?.raw?.role_name || ''
+    return roleName.toString().toLowerCase().includes('sinh') || roleName.toString().toLowerCase() === 'student'
+  })
+  students.value = studentAccounts.map(mapAccountToStudent)
+}, { immediate: true })
 
 const handleFilterChange = (newFilters) => {
   filters.value = newFilters
@@ -425,23 +408,214 @@ const closeViewModal = () => {
   selectedStudent.value = null
 }
 
-const handleSubmitStudent = (data) => {
-  if (data.id) {
-    // Show update confirmation modal
-    studentToUpdate.value = data
-    updateStudentModalVisible.value = true
-  } else {
-    // Add new
-    const newStudent = {
-      ...data,
-      id: Date.now(),
-      gpa: 0,
-      credits: 0,
-      completedSubjects: 0,
-      retakeSubjects: 0
+const handleSubmitStudent = async (data) => {
+  try {
+    if (data.id) {
+      // Update existing user/profile
+      const userCode = data.userCode || data.studentCode || (data.raw && data.raw.user_code)
+      if (!userCode) throw new Error('Không tìm thấy mã người dùng để cập nhật')
+
+      const parentsArray = data.parents && Array.isArray(data.parents) && data.parents.length
+        ? data.parents.map(p => ({ parent_name: p.parent_name || p.name || '', parent_contact: p.parent_contact || p.contact || '', parent_relationship: p.parent_relationship || p.relationship || 'phu huynh' }))
+        : undefined
+
+      const payload = {
+        user: {
+            user_email: data.email || `${data.studentCode}@gmail.com`,
+          user_phone: data.phoneNumber
+        },
+          profile: {
+          student_name: data.fullName,
+          student_code: data.studentCode,
+          student_birthdate: data.dateOfBirth || null,
+          student_gender: data.gender || null,
+          student_address: data.address || null,
+          student_CCCD: data.identityCard || null,
+          student_place_of_birth: data.birthPlace || null,
+            student_day_joined: data.enrollmentDate || null,
+            student_year_expected: data.expectedGraduationYear || null,
+          academic_year_id: Number(data.course) || null,
+          major_id: Number(data.major) || null,
+          office_class_id: Number(data.officialClass) || null,
+          student_active: data.status === 'studying' || data.status === 'active',
+          advisor_id: Number(data.advisorId) || null,
+          parents: parentsArray
+        }
+      }
+      console.debug('[StudentsManager] updateUser payload:', payload)
+      const res = await updateUser(userCode, payload)
+      console.debug('[StudentsManager] updateUser response:', res)
+      console.debug('[StudentsManager] updateUser response:', res)
+      // close & refresh
+      closeStudentModal()
+      await loadStudents()
+      // If an avatar file was provided in the modal, upload it using server-side endpoint or Cloudinary fallback
+      if (data.avatarFile) {
+        try {
+          uploadInProgress.value = true
+          uploadProgress.value = 0
+          // Build upload URL
+          const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
+          let API_BASE = String(_rawBase || '/api')
+          if (!API_BASE.includes('/api')) API_BASE = API_BASE.replace(/\/+$/, '') + '/api'
+          const uploadUrl = `${API_BASE.replace(/\/+$/,'')}/share/auth/users/${encodeURIComponent(userCode)}/avatar`
+          try {
+            await uploadWithProgress(uploadUrl, data.avatarFile, (p) => { uploadProgress.value = p }, { fieldName: 'avatar' })
+            await loadStudents()
+            alert('Cập nhật avatar thành công')
+          } catch (err) {
+            const txt = (err && err.message) || ''
+            if (txt.startsWith('404')) {
+              try {
+                const cloudRes = await uploadImageToCloudinary(data.avatarFile, (p) => { uploadProgress.value = p })
+                if (cloudRes) {
+                  const patchPayload = { user: { user_avatar: cloudRes.secure_url, user_avatar_public_id: cloudRes.public_id } }
+                  await updateUser(userCode, patchPayload)
+                  await loadStudents()
+                  alert('Cập nhật avatar thành công (Cloudinary)')
+                }
+              } catch (e) {
+                console.warn('Cloudinary fallback failed for avatar update', e)
+                alert('Cập nhật avatar thất bại')
+              }
+            } else {
+              console.warn('Avatar upload failed', err)
+              alert('Cập nhật avatar thất bại')
+            }
+          }
+        } catch (e) { console.warn('upload avatar outer failed', e) }
+        finally { uploadInProgress.value = false; uploadProgress.value = 0 }
+      }
+      // After update, check if parent created/updated on server
+      const updatedUser = (res && res.user) ? res.user : (res && res.updated) ? res.updated : res
+      const studentObjU = updatedUser && (updatedUser.Student || updatedUser.student || updatedUser.profile || updatedUser)
+      const parentArrU = (studentObjU && (studentObjU.parents || studentObjU.ParentStudents || studentObjU.parent_students)) || (updatedUser && (updatedUser.parents || updatedUser.ParentStudents))
+      if (parentsArray && parentsArray.length && !(parentArrU && parentArrU.length)) {
+        try {
+          const studentId = (studentObjU && (studentObjU.student_id || studentObjU.id || studentObjU.studentId)) || (updatedUser && (updatedUser.student_id || updatedUser.id))
+            if (studentId) {
+            // create each parent via fallback endpoint
+            for (const p of parentsArray) {
+              await parentStudentService.createParent(studentId, p)
+            }
+            await loadStudents()
+            alert('Cập nhật sinh viên thành công và lưu thông tin phụ huynh thành công (qua fallback API).')
+          } else {
+            alert('Cập nhật sinh viên thành công. Lưu ý: thông tin phụ huynh không được lưu (backend không hỗ trợ ParentStudents trong payload).')
+          }
+        } catch (err) {
+          console.warn('Parent creation fallback failed:', err)
+          alert('Cập nhật sinh viên thành công. Lưu ý: không thể lưu thông tin phụ huynh tự động. Vui lòng kiểm tra endpoint backend.')
+        }
+      } else {
+        alert('Cập nhật sinh viên thành công')
+      }
+    } else {
+      // Create new user with profile
+      const parentsArray = data.parents && Array.isArray(data.parents) && data.parents.length
+        ? data.parents.map(p => ({ parent_name: p.parent_name || p.name || '', parent_contact: p.parent_contact || p.contact || '', parent_relationship: p.parent_relationship || p.relationship || 'phu huynh' }))
+        : undefined
+
+      const payload = {
+        user: {
+          user_code: data.studentCode,
+          user_password: data.password || '123456789', // default if not provided
+          user_email: data.email || `${data.studentCode}@gmail.com`,
+          user_phone: data.phoneNumber
+        },
+        role_name: 'Sinh viên',
+          profile: {
+          student_name: data.fullName,
+          student_code: data.studentCode,
+          student_birthdate: data.dateOfBirth || null,
+          student_gender: data.gender || null,
+          student_address: data.address || null,
+          student_CCCD: data.identityCard || null,
+          student_place_of_birth: data.birthPlace || null,
+            student_day_joined: data.enrollmentDate || null,
+            student_year_expected: data.expectedGraduationYear || null,
+          academic_year_id: Number(data.course) || null,
+          major_id: Number(data.major) || null,
+          office_class_id: Number(data.officialClass) || null,
+          student_active: data.status === 'studying' || data.status === 'active',
+          advisor_id: Number(data.advisorId) || null,
+          parents: parentsArray
+        }
+      }
+      console.debug('[StudentsManager] createUser payload:', payload)
+      // Try uploading to Cloudinary first to include avatar URL directly in create payload
+      if (data.avatarFile) {
+        try {
+          uploadInProgress.value = true
+          uploadProgress.value = 0
+          const cloudRes = await uploadImageToCloudinary(data.avatarFile, (p) => { uploadProgress.value = p })
+          if (cloudRes) {
+            payload.user.user_avatar = cloudRes.secure_url
+            payload.user.user_avatar_public_id = cloudRes.public_id
+          }
+        } catch (e) {
+          console.warn('Cloudinary upload for create failed', e)
+        } finally { uploadInProgress.value = false; uploadProgress.value = 0 }
+      }
+      const res = await createUser(payload)
+      console.debug('[StudentsManager] createUser response:', res)
+      closeStudentModal()
+      await loadStudents()
+      // If an avatar file was provided and we didn't attach via Cloudinary earlier, try server upload
+      if (data.avatarFile && !payload.user.user_avatar) {
+        try {
+          uploadInProgress.value = true
+          uploadProgress.value = 0
+          const createdCode = (res && res.user && (res.user.user_code || res.user.userCode)) || payload.user.user_code
+          const _rawBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || '/api'
+          let API_BASE = String(_rawBase || '/api')
+          if (!API_BASE.includes('/api')) API_BASE = API_BASE.replace(/\/+$/, '') + '/api'
+          const uploadUrl = `${API_BASE.replace(/\/+$/,'')}/share/auth/users/${encodeURIComponent(createdCode)}/avatar`
+          try {
+            await uploadWithProgress(uploadUrl, data.avatarFile, (p) => { uploadProgress.value = p }, { fieldName: 'avatar' })
+            await loadStudents()
+            alert('Tạo sinh viên thành công và upload avatar thành công')
+          } catch (err) {
+            const txt = (err && err.message) || ''
+            if (txt.startsWith('404')) {
+              console.warn('Create: avatar endpoint not found (404)')
+            } else {
+              console.warn('Create: avatar upload failed', err)
+            }
+          }
+        } catch (e) { console.warn('create avatar upload flow failed', e) }
+        finally { uploadInProgress.value = false; uploadProgress.value = 0 }
+      }
+      // After create, check if parent created on server
+      const createdUser = (res && res.user) ? res.user : (res && res.createdUser) ? res.createdUser : res
+      const studentObj = createdUser && (createdUser.Student || createdUser.student || createdUser.profile || createdUser) // fallback
+      const parentArr = (studentObj && (studentObj.parents || studentObj.ParentStudents || studentObj.parent_students)) || (createdUser && (createdUser.parents || createdUser.ParentStudents))
+      if (parentsArray && parentsArray.length && !(parentArr && parentArr.length)) {
+        // Parent didn't get created by backend; notify
+        // Try fallback: call parent service to create parent if server exposes endpoint
+        try {
+          const studentId = (studentObj && (studentObj.student_id || studentObj.id || studentObj.studentId)) || (createdUser && (createdUser.student_id || createdUser.id))
+          if (studentId) {
+            for (const p of parentsArray) {
+              await parentStudentService.createParent(studentId, p)
+            }
+            // If created successfully, refresh list
+            await loadStudents()
+            alert('Tạo sinh viên thành công và lưu thông tin phụ huynh thành công (qua fallback API).')
+          } else {
+            alert('Tạo sinh viên thành công. Lưu ý: thông tin phụ huynh không được lưu (backend không hỗ trợ ParentStudents trong payload).')
+          }
+        } catch (err) {
+          console.warn('Parent creation fallback failed:', err)
+          alert('Tạo sinh viên thành công. Lưu ý: không thể lưu thông tin phụ huynh tự động. Vui lòng kiểm tra endpoint backend.')
+        }
+      } else {
+        alert('Tạo sinh viên thành công')
+      }
     }
-    students.value.push(newStudent)
-    closeStudentModal()
+  } catch (err) {
+    console.error('handleSubmitStudent error', err)
+    alert(err.message || 'Có lỗi xảy ra khi lưu thông tin sinh viên')
   }
 }
 
@@ -472,15 +646,20 @@ const closeDeleteStudentModal = () => {
   studentToDelete.value = null
 }
 
-const confirmDeleteStudent = () => {
+const confirmDeleteStudent = async () => {
   if (!studentToDelete.value) return
-  
-  const index = students.value.findIndex((s) => s.id === studentToDelete.value.id)
-  if (index !== -1) {
-    students.value.splice(index, 1)
+  try {
+    const userCode = studentToDelete.value.userCode || studentToDelete.value.studentCode || studentToDelete.value.raw?.user_code
+    if (!userCode) throw new Error('Không tìm thấy mã người dùng để xóa')
+    await deleteUser(userCode)
+    await loadStudents()
+    alert(`Đã xóa sinh viên "${studentToDelete.value.fullName}" thành công`)
+  } catch (err) {
+    console.error('confirmDeleteStudent error', err)
+    alert(err.message || 'Xóa sinh viên thất bại')
+  } finally {
+    closeDeleteStudentModal()
   }
-  alert(`Đã xóa sinh viên "${studentToDelete.value.fullName}" thành công`)
-  closeDeleteStudentModal()
 }
 
 const clearSelection = () => {

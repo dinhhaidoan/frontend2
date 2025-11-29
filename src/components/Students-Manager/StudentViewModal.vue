@@ -81,14 +81,26 @@
 
             <h3><i class="fas fa-users"></i> Thông tin phụ huynh</h3>
             <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Họ tên:</span>
-                <span class="value">{{ student.parentName || 'Chưa cập nhật' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Số điện thoại:</span>
-                <span class="value">{{ student.parentPhone || 'Chưa cập nhật' }}</span>
-              </div>
+              <template v-if="student.parents && student.parents.length">
+                <div v-for="(p, i) in student.parents" :key="i" class="info-item">
+                  <span class="label">Họ tên phụ huynh {{ i + 1 }}:</span>
+                  <span class="value">{{ p.parent_name || p.name || p.parentName || 'Chưa cập nhật' }}</span>
+                </div>
+                <div v-for="(p, i) in student.parents" :key="'phone-'+i" class="info-item">
+                  <span class="label">SĐT phụ huynh {{ i + 1 }}:</span>
+                  <span class="value">{{ p.parent_contact || p.contact || p.parent_phone || 'Chưa cập nhật' }}</span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="info-item">
+                  <span class="label">Họ tên:</span>
+                  <span class="value">{{ student.parentName || 'Chưa cập nhật' }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="label">Số điện thoại:</span>
+                  <span class="value">{{ student.parentPhone || 'Chưa cập nhật' }}</span>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -170,14 +182,6 @@
               <div class="info-item">
                 <span class="label">Ngày nhập học:</span>
                 <span class="value">{{ formatDate(student.enrollmentDate) }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Cố vấn học tập:</span>
-                <span class="value">{{ student.advisorName || 'Chưa phân công' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Năm dự kiến tốt nghiệp:</span>
-                <span class="value">{{ student.expectedGraduationYear || 'Chưa xác định' }}</span>
               </div>
             </div>
           </div>

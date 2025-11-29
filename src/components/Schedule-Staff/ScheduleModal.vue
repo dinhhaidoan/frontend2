@@ -14,7 +14,6 @@
       <div class="modal-body">
         <form @submit.prevent="handleSubmit">
           <div class="form-grid">
-            <!-- Subject Selection -->
             <div class="form-group full-width">
               <label class="required">Chọn môn học</label>
               <select 
@@ -28,12 +27,11 @@
                   :key="subject.id" 
                   :value="subject.id"
                 >
-                  {{ subject.code }} - {{ subject.name }}{{ subject.teacherName ? (' — ' + subject.teacherName) : '' }}
+                  {{ subject.code }} - {{ subject.name }}{{ getTeacherNameFromSubject(subject) ? (' — ' + getTeacherNameFromSubject(subject)) : '' }}
                 </option>
               </select>
             </div>
 
-            <!-- Subject Info Display -->
             <div v-if="selectedSubject" class="subject-info">
               <div class="info-grid">
                 <div class="info-item">
@@ -45,7 +43,6 @@
               </div>
             </div>
 
-            <!-- Schedule Type -->
             <div class="form-group">
               <label class="required">Loại lịch</label>
               <select v-model="formData.scheduleType" required>
@@ -54,7 +51,6 @@
               </select>
             </div>
 
-            <!-- Group Selection (for practical classes) -->
             <div class="form-group">
               <label>Nhóm thực hành</label>
               <select v-model="formData.groupId">
@@ -67,11 +63,9 @@
               <small>Chọn nhóm nếu môn học có thực hành riêng</small>
             </div>
 
-            <!-- Schedule Builder -->
             <div class="form-group full-width">
               <label class="required">Xếp lịch học</label>
               
-              <!-- Multiple Days Selection -->
               <div class="schedule-builder">
                 <div class="days-selection">
                   <label>Chọn các thứ trong tuần:</label>
@@ -92,7 +86,6 @@
                   </div>
                 </div>
 
-                <!-- Individual Day Schedule Setup -->
                 <div v-if="selectedDays.length > 0" class="individual-days-setup">
                   <label>Thiết lập lịch học riêng cho từng ngày:</label>
                   
@@ -113,7 +106,6 @@
                       </button>
                     </div>
 
-                    <!-- Time Slots for Current Editing Day -->
                     <div v-if="currentEditingDay" class="tab-content">
                       <div class="day-header">
                         <h4>{{ getDayName(currentEditingDay) }}</h4>
@@ -144,7 +136,6 @@
                         </label>
                       </div>
 
-                      <!-- Current Day Preview -->
                       <div v-if="dayScheduleData[currentEditingDay] && dayScheduleData[currentEditingDay].length > 0" class="current-day-preview">
                         <strong>{{ getDayName(currentEditingDay) }}:</strong> 
                         {{ getDaySlotText(currentEditingDay) }}
@@ -153,7 +144,6 @@
                     </div>
                   </div>
 
-                  <!-- All Days Preview and Add Button -->
                   <div v-if="hasAnyDaySchedule" class="all-days-preview">
                     <h4>Tổng quan lịch học:</h4>
                     <div v-for="day in selectedDays" :key="day" class="preview-day">
@@ -178,7 +168,6 @@
                   </div>
                 </div>
 
-                <!-- Added Schedule Days -->
                 <div v-if="scheduleDays.length > 0" class="added-schedules">
                   <h4>Lịch học đã thiết lập:</h4>
                   <div 
@@ -206,27 +195,17 @@
               </div>
             </div>
 
-            <!-- Start Date -->
             <div class="form-group">
               <label class="required">Ngày bắt đầu</label>
-              <input
-                type="date"
-                v-model="formData.startDate"
-                required
-              />
+              <input type="date" v-model="formData.startDate" required />
             </div>
 
-            <!-- End Date -->
             <div class="form-group">
               <label>Ngày kết thúc</label>
-              <input
-                type="date"
-                v-model="formData.endDate"
-              />
+              <input type="date" v-model="formData.endDate" />
               <small>Để trống nếu chỉ tạo lịch cho một buổi</small>
             </div>
 
-            <!-- Repeat Options -->
             <div class="form-group full-width">
               <label>Tùy chọn lặp lại</label>
               <div class="repeat-options">
@@ -245,19 +224,12 @@
               </div>
             </div>
 
-            <!-- Custom Repeat Settings -->
             <div v-if="formData.repeatType === 'custom_weeks'" class="form-group full-width">
               <label>Cài đặt lặp lại</label>
               <div class="custom-repeat">
                 <div class="repeat-row">
                   <span>Lặp lại mỗi</span>
-                  <input 
-                    type="number" 
-                    v-model="formData.repeatInterval" 
-                    min="1" 
-                    max="4"
-                    class="repeat-input"
-                  />
+                  <input type="number" v-model="formData.repeatInterval" min="1" max="4" class="repeat-input" />
                   <span>tuần</span>
                 </div>
               </div>
@@ -265,9 +237,7 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" @click="$emit('close')" class="btn-cancel">
-              Hủy
-            </button>
+            <button type="button" @click="$emit('close')" class="btn-cancel">Hủy</button>
             <button type="submit" class="btn-save" :disabled="!isFormValid">
               <i class="fas fa-save"></i>
               {{ isEdit ? 'Cập nhật' : 'Tạo lịch học' }}
@@ -280,38 +250,21 @@
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 export default {
   name: 'ScheduleModal',
   props: {
-    schedule: {
-      type: Object,
-      default: null
-    },
-    subjects: {
-      type: Array,
-      default: () => []
-    },
-    teachers: {
-      type: Array,
-      default: () => []
-    },
-    rooms: {
-      type: Array,
-      default: () => []
-    },
-    semesters: {
-      type: Array,
-      default: () => []
-    },
-    isEdit: {
-      type: Boolean,
-      default: false
-    }
+    schedule: { type: Object, default: null },
+    subjects: { type: Array, default: () => [] },
+    teachers: { type: Array, default: () => [] },
+    rooms: { type: Array, default: () => [] },
+    semesters: { type: Array, default: () => [] },
+    isEdit: { type: Boolean, default: false }
   },
   emits: ['close', 'save'],
   setup(props, { emit }) {
+    // 1. STATE
     const formData = ref({
       subjectId: '',
       scheduleType: 'study',
@@ -324,15 +277,13 @@ export default {
       notes: ''
     })
 
-    // Schedule building variables
     const selectedDays = ref([])
     const scheduleDays = ref([])
     const selectedSubject = ref(null)
-    
-    // Individual day schedule data
     const currentEditingDay = ref('')
-    const dayScheduleData = ref({}) // { '2': ['1', '2', '3'], '4': ['6', '7'] }
+    const dayScheduleData = ref({})
 
+    // 2. CONSTANTS
     const dayOptions = [
       { value: '2', label: 'Thứ Hai' },
       { value: '3', label: 'Thứ Ba' },
@@ -359,331 +310,186 @@ export default {
       { value: '13', label: 'Tiết 13', time: '19:40-20:25' }
     ]
 
-    // Handle subject selection
+    // 3. HELPERS
     const handleSubjectChange = () => {
       const subject = props.subjects.find(s => s.id === formData.value.subjectId)
-      if (subject) {
-        selectedSubject.value = subject
-      }
+      if (subject) selectedSubject.value = subject
     }
 
-    const selectedTeacherName = computed(() => {
-      if (selectedSubject.value && selectedSubject.value.teacherName) return selectedSubject.value.teacherName
-      // try to find teacher from props.teachers if teacherId present
-      const teacherId = selectedSubject.value?.teacherId || selectedSubject.value?.teacher_id
-      if (teacherId && Array.isArray(props.teachers)) {
-        const t = props.teachers.find(x => x.teacherId === teacherId || x.id === teacherId)
-        if (t) return t.name
-      }
-      return ''
-    })
-
-    // Auto-select first day when days are selected
-    watch(selectedDays, (newDays) => {
-      if (newDays.length > 0 && !currentEditingDay.value) {
-        currentEditingDay.value = newDays[0]
-      } else if (newDays.length === 0) {
-        currentEditingDay.value = ''
-        dayScheduleData.value = {}
-      } else if (!newDays.includes(currentEditingDay.value)) {
-        currentEditingDay.value = newDays[0]
-      }
-    }, { deep: true })
-
-    // Slot availability check (simplified)
-    const isSlotAvailable = (slotValue) => {
-      return true // Simplified for now
+    const getDayName = (val) => dayOptions.find(d => d.value === val)?.label || `Thứ ${val}`
+    
+    const getGroupName = (id) => {
+      const names = { 'group1': 'Nhóm 1', 'group2': 'Nhóm 2', 'group3': 'Nhóm 3', 'group4': 'Nhóm 4' }
+      return names[id] || id
     }
 
-    // Get selected slots text
-    const getSelectedSlotsText = () => {
-      if (selectedTimeSlots.value.length === 0) return ''
-      
-      const slots = selectedTimeSlots.value
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map(slotValue => {
-          const slot = timeSlotOptions.find(s => s.value === slotValue)
-          return slot ? `${slot.label} (${slot.time})` : slotValue
-        })
-      
-      return slots.join(', ')
+    const getTeacherNameFromSubject = (subject) => {
+      if (!subject) return ''
+      return subject.teacherName || ''
     }
 
-    // Get selected duration
-    const getSelectedDuration = () => {
-      return selectedTimeSlots.value.length * 45 // 45 minutes per slot
-    }
+    const isSlotAvailable = () => true
 
-    // Get day name
-    const getDayName = (dayValue) => {
-      const day = dayOptions.find(d => d.value === dayValue)
-      return day ? day.label : `Thứ ${dayValue}`
-    }
+    // 4. TAB LOGIC
+    const isDaySlotSelected = (day, slot) => dayScheduleData.value[day]?.includes(slot) || false
 
-    // Get group name
-    const getGroupName = (groupId) => {
-      const groupNames = {
-        'group1': 'Nhóm 1',
-        'group2': 'Nhóm 2', 
-        'group3': 'Nhóm 3',
-        'group4': 'Nhóm 4'
-      }
-      return groupNames[groupId] || groupId
-    }
-
-    // Individual day schedule functions
-    const isDaySlotSelected = (day, slotValue) => {
-      return dayScheduleData.value[day]?.includes(slotValue) || false
-    }
-
-    const toggleDaySlot = (day, slotValue) => {
-      if (!dayScheduleData.value[day]) {
-        dayScheduleData.value[day] = []
-      }
-      
-      const index = dayScheduleData.value[day].indexOf(slotValue)
-      if (index > -1) {
-        dayScheduleData.value[day].splice(index, 1)
-      } else {
-        dayScheduleData.value[day].push(slotValue)
-      }
+    const toggleDaySlot = (day, slot) => {
+      if (!dayScheduleData.value[day]) dayScheduleData.value[day] = []
+      const idx = dayScheduleData.value[day].indexOf(slot)
+      if (idx > -1) dayScheduleData.value[day].splice(idx, 1)
+      else dayScheduleData.value[day].push(slot)
     }
 
     const getDaySlotText = (day) => {
       const slots = dayScheduleData.value[day] || []
       if (slots.length === 0) return 'Chưa chọn tiết'
-      
-      return slots
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map(slotValue => {
-          const slot = timeSlotOptions.find(s => s.value === slotValue)
-          return slot ? `${slot.label} (${slot.time})` : slotValue
-        })
-        .join(', ')
+      return slots.sort((a, b) => parseInt(a) - parseInt(b))
+        .map(v => {
+          const s = timeSlotOptions.find(opt => opt.value === v)
+          return s ? `${s.label} (${s.time})` : v
+        }).join(', ')
     }
 
-    const getDayDuration = (day) => {
-      const slots = dayScheduleData.value[day] || []
-      return slots.length * 45 // 45 minutes per slot
-    }
+    const getDayDuration = (day) => (dayScheduleData.value[day] || []).length * 45
 
-    const hasAnyDaySchedule = computed(() => {
-      return selectedDays.value.some(day => 
-        dayScheduleData.value[day] && dayScheduleData.value[day].length > 0
-      )
-    })
+    // 5. COMPUTED
+    const hasAnyDaySchedule = computed(() => selectedDays.value.some(d => dayScheduleData.value[d]?.length > 0))
+    const hasValidSchedules = computed(() => hasAnyDaySchedule.value)
+    const getValidScheduleCount = computed(() => selectedDays.value.filter(d => dayScheduleData.value[d]?.length > 0).length)
+    
+    const isFormValid = computed(() => 
+      formData.value.subjectId && 
+      formData.value.scheduleType && 
+      scheduleDays.value.length > 0 && 
+      formData.value.status
+    )
 
-    const hasValidSchedules = computed(() => {
-      return selectedDays.value.some(day => 
-        dayScheduleData.value[day] && dayScheduleData.value[day].length > 0
-      )
-    })
-
-    const getValidScheduleCount = computed(() => {
-      return selectedDays.value.filter(day => 
-        dayScheduleData.value[day] && dayScheduleData.value[day].length > 0
-      ).length
-    })
-
-    // Add all day schedules
+    // 6. ACTIONS
     const addAllDaySchedules = () => {
-      // Remove existing schedules for selected days
-      scheduleDays.value = scheduleDays.value.filter(schedule => 
-        !selectedDays.value.includes(schedule.day)
-      )
-      
-      // Add new schedules for days that have slots selected
+      scheduleDays.value = scheduleDays.value.filter(s => !selectedDays.value.includes(s.day))
       selectedDays.value.forEach(day => {
-        if (dayScheduleData.value[day] && dayScheduleData.value[day].length > 0) {
+        if (dayScheduleData.value[day]?.length > 0) {
           scheduleDays.value.push({
-            day: day,
+            day,
             slots: [...dayScheduleData.value[day]],
             slotsText: getDaySlotText(day),
             duration: getDayDuration(day)
           })
         }
       })
-
-      // Clear selections
+      // Reset
       selectedDays.value = []
       dayScheduleData.value = {}
       currentEditingDay.value = ''
     }
 
-    // Remove schedule day
-    const removeScheduleDay = (index) => {
-      scheduleDays.value.splice(index, 1)
-    }
+    const removeScheduleDay = (index) => scheduleDays.value.splice(index, 1)
 
-    // Handle form submission
     const handleSubmit = () => {
       if (!isFormValid.value) return
-
-      const scheduleData = {
+      const data = {
         ...formData.value,
-        scheduleDays: scheduleDays.value,
-        scheduleType: formData.value.scheduleType
+        scheduleDays: scheduleDays.value.map(d => ({ day: d.day, slots: d.slots }))
       }
-      if (scheduleData.repeatType === 'custom_weeks' && scheduleData.repeatInterval !== undefined) {
-        scheduleData.repeatWeeks = scheduleData.repeatInterval
-      }
-
-      // Add subject info
+      if (data.repeatType === 'custom_weeks') data.repeatWeeks = formData.value.repeatInterval
       if (selectedSubject.value) {
-        scheduleData.subjectName = selectedSubject.value.name
-        scheduleData.subjectCode = selectedSubject.value.code
-        scheduleData.teacherName = selectedSubject.value.teacherName
-        scheduleData.roomName = selectedSubject.value.roomName
+        data.subjectName = selectedSubject.value.name
+        data.subjectCode = selectedSubject.value.code
+        data.teacherName = selectedSubject.value.teacherName
+        data.roomName = selectedSubject.value.roomName
+      }
+      emit('save', data)
+    }
+
+    const handleOverlayClick = () => emit('close')
+
+    // 7. LOAD DATA
+    const apiDayToModalDay = (w) => {
+      const n = Number(w)
+      if (isNaN(n)) return null
+      if (n === 0 || n === 1) return '8'
+      return String(n)
+    }
+
+    const loadScheduleData = () => {
+      // Reset
+      scheduleDays.value = []
+      selectedDays.value = []
+      dayScheduleData.value = {}
+      currentEditingDay.value = ''
+
+      if (!props.schedule) {
+        // Create Mode
+        formData.value = {
+          subjectId: '', scheduleType: 'study', groupId: '',
+          startDate: '', endDate: '', repeatType: 'weekly',
+          repeatInterval: 1, status: 'scheduled', notes: ''
+        }
+        return
       }
 
-      emit('save', scheduleData)
-    }
-
-    // Handle overlay click
-    const handleOverlayClick = () => {
-      emit('close')
-    }
-
-    // Function to load schedule data
-// Helper chuyển đổi thứ từ API (ví dụ 1=CN, 2=T2) sang format của Modal (8=CN, 2=T2)
-    // Bạn cần kiểm tra xem API trả về 1 hay 0 cho Chủ nhật để điều chỉnh hàm này
-    const apiDayToModalDay = (weekday) => {
-      const w = Number(weekday)
-      if (isNaN(w)) return null
-      // Giả sử API: 2->Thứ 2 ... 7->Thứ 7, 8 (hoặc 1/0) -> Chủ nhật
-      // Modal đang dùng: '2'...'8' (8 là CN)
-      // Nếu API trả về 8 là CN thì giữ nguyên, nếu 0 hoặc 1 là CN thì map về 8
-      if (w === 0 || w === 1) return '8' 
-      return String(w)
-    }
-
-    // Thay thế hàm loadScheduleData cũ bằng hàm này:
-
-const loadScheduleData = () => {
-  // Reset state
-  scheduleDays.value = []
-  selectedDays.value = []
-  dayScheduleData.value = {}
-  currentEditingDay.value = ''
-
-  if (props.schedule) {
-    const s = props.schedule
-    console.log('Modal received:', s) // Debug
-
-    // 1. Map fields (Chuyển đổi type an toàn)
-    // subjectId cần khớp type với value trong <option> (thường là number)
-    // Nếu s.subjectId là string "1" mà option value là number 1, v-model có thể không nhận.
-    formData.value.subjectId = s.subjectId
-    
-    formData.value.scheduleType = s.scheduleType || 'study'
-    formData.value.groupId = s.groupId || ''
-    
-    // Cắt chuỗi ngày (YYYY-MM-DD) nếu API trả về full datetime ISO
-    formData.value.startDate = s.startDate ? String(s.startDate).split('T')[0] : ''
-    formData.value.endDate = s.endDate ? String(s.endDate).split('T')[0] : ''
-    
-    formData.value.repeatType = s.repeatType || 'weekly'
-    formData.value.repeatInterval = s.repeatInterval || 1
-    formData.value.status = s.status || 'scheduled'
-    formData.value.notes = s.notes || ''
-
-    // 2. Map Schedule Days
-    if (s.scheduleDays && Array.isArray(s.scheduleDays)) {
-      // Dữ liệu hiển thị danh sách bên phải
-      scheduleDays.value = s.scheduleDays.map(d => {
-        const dayStr = apiDayToModalDay(d.day)
-        const slotArr = Array.isArray(d.slots) ? d.slots.map(String) : []
-        return {
-          day: dayStr,
-          slots: slotArr,
-          slotsText: slotArr.map(sl => `Tiết ${sl}`).join(', '),
-          duration: slotArr.length * 45
-        }
-      }).filter(d => d.day) // Lọc bỏ ngày null
-
-      // Dữ liệu cho form chỉnh sửa (checkboxes)
-      const loadedDays = []
-      const loadedData = {}
+      // Edit Mode
+      const s = props.schedule
+      formData.value.subjectId = s.subjectId || s.courseClassId || ''
+      formData.value.scheduleType = s.scheduleType || (s.type === 'exam' ? 'exam' : 'study')
+      formData.value.groupId = s.groupId || ''
+      formData.value.status = s.status || 'scheduled'
+      formData.value.notes = s.notes || ''
+      formData.value.repeatType = (s.repeatType === 'custom' || s.repeatType === 'custom_weeks') ? 'custom_weeks' : (s.repeatType || 'weekly')
+      formData.value.repeatInterval = s.repeatInterval || s.repeatWeeks || 1
       
-      scheduleDays.value.forEach(item => {
-        if (!loadedDays.includes(item.day)) {
-          loadedDays.push(item.day)
-        }
-        // Map slot về mảng string để so sánh checkbox
-        loadedData[item.day] = item.slots.map(String)
-      })
+      const toDateStr = (d) => d ? (typeof d === 'string' ? d.split('T')[0] : d.toISOString().split('T')[0]) : ''
+      formData.value.startDate = toDateStr(s.startDate)
+      formData.value.endDate = toDateStr(s.endDate)
 
-      selectedDays.value = loadedDays
-      dayScheduleData.value = loadedData
-      
-      if (loadedDays.length > 0) {
-        currentEditingDay.value = loadedDays[0]
+      if (s.scheduleDays && Array.isArray(s.scheduleDays)) {
+        // Load danh sách đã có
+        scheduleDays.value = s.scheduleDays.map(d => {
+          const dayStr = apiDayToModalDay(d.day || d.dayOfWeek || d.weekdayId)
+          const slots = (d.slots || d.timeSlots || []).map(String)
+          return {
+            day: dayStr,
+            slots,
+            slotsText: slots.map(v => {
+              const opt = timeSlotOptions.find(o => o.value === v)
+              return opt ? `${opt.label} (${opt.time})` : v
+            }).join(', '),
+            duration: slots.length * 45
+          }
+        }).filter(d => d.day)
+
+        // Load ngược vào builder để sửa nhanh
+        const days = []
+        const data = {}
+        scheduleDays.value.forEach(d => {
+          if (!days.includes(d.day)) days.push(d.day)
+          data[d.day] = [...d.slots]
+        })
+        selectedDays.value = days
+        dayScheduleData.value = data
+        if (days.length > 0) currentEditingDay.value = days[0]
       }
+
+      if (formData.value.subjectId) setTimeout(handleSubjectChange, 0)
     }
 
-    // Trigger để hiện tên môn/phòng/gv
-    if (formData.value.subjectId) {
-        // Dùng setTimeout để đảm bảo DOM đã update hoặc subjects prop đã sẵn sàng
-        setTimeout(() => handleSubjectChange(), 0)
-    }
-  } else {
-    // Reset form for Create Mode
-    formData.value = {
-      subjectId: '',
-      scheduleType: props.scheduleType || 'study',
-      groupId: '',
-      startDate: '',
-      endDate: '',
-      repeatType: 'weekly',
-      repeatInterval: 1,
-      status: 'scheduled',
-      notes: ''
-    }
-  }
-}
-
-    // Initialize form data for edit mode
-    loadScheduleData()
-
-    // Watch for schedule changes
-    watch(() => props.schedule, () => {
-      loadScheduleData()
+    watch(() => props.schedule, loadScheduleData, { deep: true, immediate: true })
+    
+    // Auto switch tabs
+    watch(selectedDays, (newVal) => {
+      if (newVal.length > 0 && !currentEditingDay.value) currentEditingDay.value = newVal[0]
+      else if (newVal.length === 0) currentEditingDay.value = ''
+      else if (!newVal.includes(currentEditingDay.value)) currentEditingDay.value = newVal[0]
     }, { deep: true })
 
-    // Form validation
-    const isFormValid = computed(() => {
-      return formData.value.subjectId && 
-             formData.value.scheduleType &&
-             scheduleDays.value.length > 0 &&
-             formData.value.status
-    })
-
     return {
-      formData,
-      selectedDays,
-      scheduleDays,
-      selectedSubject,
-      currentEditingDay,
-      dayScheduleData,
-      dayOptions,
-      timeSlotOptions,
-      isFormValid,
-      handleSubjectChange,
-      isSlotAvailable,
-      getDayName,
-      getGroupName,
-      removeScheduleDay,
-      handleSubmit,
-      handleOverlayClick,
-      // Individual day functions
-      isDaySlotSelected,
-      toggleDaySlot,
-      getDaySlotText,
-      getDayDuration,
-      hasAnyDaySchedule,
-      hasValidSchedules,
-      getValidScheduleCount,
-      addAllDaySchedules
+      formData, selectedDays, scheduleDays, selectedSubject,
+      currentEditingDay, dayScheduleData, dayOptions, timeSlotOptions,
+      isFormValid, handleSubjectChange, getTeacherNameFromSubject,
+      isSlotAvailable, getDayName, getGroupName, removeScheduleDay,
+      handleSubmit, handleOverlayClick, isDaySlotSelected, toggleDaySlot,
+      getDaySlotText, getDayDuration, hasAnyDaySchedule, hasValidSchedules,
+      getValidScheduleCount, addAllDaySchedules
     }
   }
 }

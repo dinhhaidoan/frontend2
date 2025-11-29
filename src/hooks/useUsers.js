@@ -38,12 +38,26 @@ export function useUsers() {
   const fetchUsers = (token) => authStore.fetchUsers(token)
   const updateUser = (userCode, payload, token) => authStore.updateUser(userCode, payload, token)
   const deleteUser = (userCode, token) => authStore.deleteUser(userCode, token)
+  const createUser = (payload, token) => authStore.createUser(payload, token)
+  const getUser = async (userCode) => {
+    // Use authService directly if needed or rely on store next time
+    try {
+      const authService = (await import('@/services/authService')).default
+      const res = await authService.getUser(userCode)
+      // res may include 'user' or direct object
+      return res.user || res
+    } catch (err) {
+      throw err
+    }
+  }
 
   return {
     accounts,
     fetchUsers,
     updateUser,
-    deleteUser,
+      createUser,
+      getUser,
+      deleteUser,
     usersLoading: authStore.usersLoading,
     usersUpdating: authStore.usersUpdating,
     usersError: authStore.usersError,

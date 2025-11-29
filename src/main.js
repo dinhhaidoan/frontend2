@@ -33,7 +33,7 @@ const initializeAuth = async () => {
       try { localStorage.setItem('auth_user', JSON.stringify(user)) } catch (e) { /* ignore */ }
     }
   } catch (err) {
-    console.warn('Backend server not available, using offline mode:', err.message)
+    console.warn('Backend server not available, using offline mode:', (err && err.message) || err)
     // Fallback to localStorage if server session invalid or server down
     store.loadUserFromStorage()
   }
@@ -45,3 +45,12 @@ const initializeAuth = async () => {
 
 // Initialize auth and mount app
 initializeAuth()
+
+// Global handler: log unhandled promise rejections for better debugging
+window.addEventListener('unhandledrejection', (evt) => {
+  try {
+    console.error('[GLOBAL] unhandledrejection:', evt.reason)
+  } catch (e) {
+    console.error('[GLOBAL] unhandledrejection (unknown reason)', evt)
+  }
+})

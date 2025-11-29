@@ -480,24 +480,41 @@ setup() {
       scheduleType.value === 'exam' ? (showExamModal.value = true) : (showScheduleModal.value = true)
     }
 
-   const editSchedule = async (s) => {
-  try {
-    const id = s.scheduleId || s.parentId || s.id
-    const res = await fetchCourseSchedule(id)
-    
-    // FIX QUAN TRỌNG: Lấy dữ liệu từ res.data nếu có wrapper
-    const rawData = res.data || res 
-    
-    console.log('API Edit Response:', rawData) // Debug để xem data trả về
-    editingSchedule.value = enrichSchedule(rawData)
-    
-    isEditMode.value = true
-    showScheduleModal.value = true
-  } catch (e) {
-    console.error(e)
-    error('Lỗi tải chi tiết lịch')
-  }
-}
+    const editSchedule = async (s) => {
+      try {
+        const id = s.scheduleId || s.parentId || s.id
+        const res = await fetchCourseSchedule(id)
+        
+        // --- SỬA ĐỔI: Logic "bóc" dữ liệu API ---
+        let realData = res
+        
+        // 1. Bóc lớp .data nếu có (Axios thường bọc 1 lớp)
+        if (realData && realData.data) {
+            realData = realData.data
+        }
+
+        // 2. Bóc tiếp lớp .course_schedule nếu API trả về dạng { course_schedule: {...} }
+        // (Dựa vào log raw: {course_schedule: ...} bạn gửi)
+        if (realData && realData.course_schedule) {
+            realData = realData.course_schedule
+        }
+        
+        // 3. Fallback: Kiểm tra xem có nằm trong thuộc tính 'raw' không
+        if (realData && realData.raw && realData.raw.course_schedule) {
+            realData = realData.raw.course_schedule
+        }
+
+        console.log('Dữ liệu chuẩn sau khi xử lý:', realData) // Kiểm tra log này phải có id, subjectId...
+
+        editingSchedule.value = enrichSchedule(realData)
+        
+        isEditMode.value = true
+        showScheduleModal.value = true
+      } catch (e) {
+        console.error('Lỗi editSchedule:', e)
+        error('Lỗi tải chi tiết lịch')
+      }
+    }
 
     const editExam = async (e) => {
       try {

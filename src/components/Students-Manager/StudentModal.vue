@@ -1,3 +1,4 @@
+                
 <template>
   <div v-if="isOpen" class="modal-overlay" @click.self="close">
     <div class="modal-container">
@@ -16,6 +17,29 @@
           <!-- Thông tin cơ bản -->
           <div class="form-section">
             <h3><i class="fas fa-id-card"></i> Thông tin cơ bản</h3>
+            <div class="avatar-row form-grid">
+              <div class="form-group avatar-preview-col">
+                <div class="avatar-preview-small">
+                  <img v-if="formData.avatarPreview" :src="formData.avatarPreview" :alt="formData.fullName || formData.studentCode || 'avatar'" @error="e => onPreviewError(e, formData.avatarPreview)" />
+                  <img v-else :src="'/default-avatar.png'" :alt="formData.fullName || formData.studentCode || 'avatar'" />
+                </div>
+              </div>
+              <div class="form-group avatar-actions-col">
+                <label class="btn-upload">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" @change="onFileChange" />
+                  <i class="fas fa-upload"></i>
+                  Chọn ảnh
+                </label>
+                <button v-if="formData.avatarPreview || formData.avatarFile" type="button" @click="removeAvatar" class="btn-remove-avatar">Xóa</button>
+                <small class="muted">Hỗ trợ: .jpg .png .webp — tối đa 5MB</small>
+                <div v-if="props.uploading" class="upload-progress">
+                  <div class="progress-line" role="progressbar" :aria-valuenow="props.uploadProgress || 0" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar" :style="{ width: (props.uploadProgress || 0) + '%' }"></div>
+                  </div>
+                  <div class="progress-label">Đang upload: {{ props.uploadProgress || 0 }}%</div>
+                </div>
+              </div>
+            </div>
             
             <div class="form-grid">
               <div class="form-group">
@@ -64,6 +88,17 @@
                 />
               </div>
 
+              <!-- Password (only when creating account) -->
+              <div v-if="!isEdit" class="form-group">
+                <label>Mật khẩu <span class="required">*</span></label>
+                <input v-model="formData.password" type="password" placeholder="Mật khẩu" required />
+              </div>
+
+              <div v-if="!isEdit" class="form-group">
+                <label>Xác nhận mật khẩu <span class="required">*</span></label>
+                <input v-model="formData.confirmPassword" type="password" placeholder="Xác nhận mật khẩu" required />
+              </div>
+
               <div class="form-group">
                 <label>Số điện thoại</label>
                 <input
@@ -100,34 +135,25 @@
             <div class="form-grid">
               <div class="form-group">
                 <label>Ngành học <span class="required">*</span></label>
-                <select v-model="formData.major" required>
+                <select v-model="formData.major" :disabled="majorsLoading" required>
                   <option value="">Chọn ngành</option>
-                  <option value="IT">Công nghệ thông tin</option>
-                  <option value="CS">Khoa học máy tính</option>
-                  <option value="IS">Hệ thống thông tin</option>
-                  <option value="DS">Khoa học dữ liệu</option>
-                  <option value="AI">Trí tuệ nhân tạo</option>
-                  <option value="SE">Kỹ thuật phần mềm</option>
+                  <option v-for="m in majorsList" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
               </div>
 
               <div class="form-group">
                 <label>Khóa <span class="required">*</span></label>
-                <select v-model="formData.course" required>
+                <select v-model="formData.course" :disabled="yearsLoading" required>
                   <option value="">Chọn khóa</option>
-                  <option value="2020">K2020</option>
-                  <option value="2021">K2021</option>
-                  <option value="2022">K2022</option>
-                  <option value="2023">K2023</option>
-                  <option value="2024">K2024</option>
+                  <option v-for="y in yearsList" :key="y.id" :value="y.id">{{ y.name }}</option>
                 </select>
               </div>
 
               <div class="form-group">
                 <label>Lớp hành chính <span class="required">*</span></label>
-                <select v-model="formData.officialClass" required>
+                <select v-model="formData.officialClass" :disabled="classesLoading" required>
                   <option value="">Chọn lớp</option>
-                  <option v-for="cls in classList" :key="cls" :value="cls">{{ cls }}</option>
+                  <option v-for="cls in filteredClassList" :key="cls.id" :value="cls.id">{{ cls.code || cls.name }}</option>
                 </select>
               </div>
 
@@ -141,20 +167,14 @@
                   <option value="expelled">Thôi học</option>
                 </select>
               </div>
-
-              <div class="form-group">
-                <label>Cố vấn học tập</label>
-                <select v-model="formData.advisorId">
-                  <option value="">Chưa phân công</option>
-                  <option v-for="advisor in advisorList" :key="advisor.id" :value="advisor.id">
-                    {{ advisor.name }}
-                  </option>
-                </select>
-              </div>
-
               <div class="form-group">
                 <label>Ngày nhập học <span class="required">*</span></label>
                 <input v-model="formData.enrollmentDate" type="date" required />
+              </div>
+
+              <div class="form-group">
+                <label>Năm tốt nghiệp dự kiến</label>
+                <input v-model="formData.expectedGraduationYear" type="date" />
               </div>
             </div>
           </div>
@@ -162,33 +182,38 @@
           <!-- Thông tin phụ huynh -->
           <div class="form-section">
             <h3><i class="fas fa-users"></i> Thông tin phụ huynh</h3>
-            
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Họ tên phụ huynh</label>
-                <input
-                  v-model="formData.parentName"
-                  type="text"
-                  placeholder="Họ tên bố/mẹ"
-                />
-              </div>
 
-              <div class="form-group">
-                <label>SĐT phụ huynh</label>
-                <input
-                  v-model="formData.parentPhone"
-                  type="tel"
-                  placeholder="0123456789"
-                />
+            <div class="form-grid">
+              <div class="parents-list full-width">
+                <div v-for="(p, idx) in formData.parents" :key="idx" class="parent-row">
+                  <div class="parent-row-grid">
+                    <div class="form-group">
+                      <label>Họ tên phụ huynh</label>
+                      <input v-model="p.parent_name" type="text" placeholder="Họ tên bố/mẹ" />
+                    </div>
+                    <div class="form-group">
+                      <label>Quan hệ</label>
+                      <input v-model="p.parent_relationship" type="text" placeholder="Ví dụ: cha/mẹ" />
+                    </div>
+                    <div class="form-group">
+                      <label>SĐT phụ huynh</label>
+                      <input v-model="p.parent_contact" type="tel" placeholder="0123456789" />
+                    </div>
+                    <div class="form-group remove-parent-col">
+                      <label>&nbsp;</label>
+                      <button type="button" @click="removeParent(idx)" class="btn-remove-parent">Xóa</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="add-parent">
+                  <button type="button" class="btn-add" @click="addParent">Thêm phụ huynh</button>
+                </div>
               </div>
 
               <div class="form-group full-width">
                 <label>Ghi chú</label>
-                <textarea
-                  v-model="formData.notes"
-                  rows="3"
-                  placeholder="Ghi chú về sinh viên (nếu có)"
-                ></textarea>
+                <textarea v-model="formData.notes" rows="3" placeholder="Ghi chú về sinh viên (nếu có)"></textarea>
               </div>
             </div>
           </div>
@@ -210,11 +235,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed, onBeforeUnmount } from 'vue'
+import { toInputDate } from '@/utils/formatters'
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+import { useMajors } from '@/hooks/useMajors'
+import { useOfficeClasses } from '@/hooks/useOfficeClasses'
+import { useAcademicYears } from '@/hooks/useAcademicYears'
+import { useTeachers } from '@/hooks/useTeachers'
 
 const props = defineProps({
   isOpen: Boolean,
-  student: Object
+  student: Object,
+  uploading: { type: Boolean, default: false },
+  uploadProgress: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['close', 'submit'])
@@ -224,6 +257,8 @@ const isEdit = ref(false)
 const formData = reactive({
   studentCode: '',
   fullName: '',
+  password: '',
+  confirmPassword: '',
   dateOfBirth: '',
   gender: '',
   email: '',
@@ -236,23 +271,71 @@ const formData = reactive({
   status: 'studying',
   advisorId: '',
   enrollmentDate: '',
-  parentName: '',
-  parentPhone: '',
+  expectedGraduationYear: '',
+  parents: [],
   notes: ''
+  ,
+  avatarFile: null,
+  avatarPreview: null
 })
 
-const classList = ref([
-  '22IT1', '22IT2', '22IT3', '22IT4',
-  '23IT1', '23IT2', '23IT3',
-  '24IT1', '24IT2'
-])
+// Use hooks to load options from backend
+const { majors, fetchMajors, loading: majorsLoading } = useMajors()
+const { officeClasses, fetchOfficeClasses, loading: classesLoading } = useOfficeClasses()
+const { academicYears, fetchAcademicYears, loading: yearsLoading } = useAcademicYears()
+const { teachers, fetchTeachers, loading: teachersLoading } = useTeachers()
 
-const advisorList = ref([
-  { id: 1, name: 'TS. Nguyễn Văn A' },
-  { id: 2, name: 'ThS. Trần Thị B' },
-  { id: 3, name: 'TS. Lê Văn C' },
-  { id: 4, name: 'PGS.TS. Phạm Thị D' }
-])
+// Local computed lists to use in selects
+const classList = computed(() => (officeClasses.value || []).map(c => ({ id: c.id, code: c.code, name: c.name, major_id: c.major_id, major: c.major || c.majorName || c.majorName || (c.Major && (c.Major.major_name || c.Major.major_id || c.Major.id)), academic_year_id: c.academic_year_id || c.course || null, course: c.course || c.academic_year_id || null, advisorId: c.advisorId || c.advisor_id || c.teacher_id || null })))
+const filteredClassList = computed(() => {
+  const list = classList.value
+  const m = formData.major
+  const y = formData.course
+  if (!m && !y) return list
+  return list.filter(c => {
+    // Major comparison: support numeric id or string code
+    let majorMatch = true
+    if (m) {
+      const mNum = Number(m)
+      if (!isNaN(mNum) && mNum !== 0) {
+        majorMatch = (c.major_id !== undefined && c.major_id !== null && Number(c.major_id) === mNum) || (c.Major && (Number(c.Major.major_id) === mNum || Number(c.Major.id) === mNum))
+      } else {
+        majorMatch = String(c.major || c.majorName || c.code || '').toLowerCase() === String(m).toLowerCase()
+      }
+    }
+    // Year/course comparison: support numeric id or string code
+    let yearMatch = true
+    if (y) {
+      const yNum = Number(y)
+      if (!isNaN(yNum) && yNum !== 0) {
+        yearMatch = (c.academic_year_id !== undefined && c.academic_year_id !== null && Number(c.academic_year_id) === yNum) || (c.course && Number(c.course) === yNum)
+      } else {
+        yearMatch = String(c.course || c.academic_year_id || '').toLowerCase() === String(y).toLowerCase()
+      }
+    }
+    return majorMatch && yearMatch
+  })
+})
+// advisor lock: when selected class has an advisor, lock advisor select and set advisorId
+const advisorLocked = computed(() => {
+  const cls = filteredClassList.value.find(c => Number(c.id) === Number(formData.officialClass))
+  return !!(cls && (cls.advisorId || cls.advisor_id || cls.teacher_id))
+})
+
+const selectedClassAdvisor = computed(() => {
+  const cls = filteredClassList.value.find(c => Number(c.id) === Number(formData.officialClass))
+  return cls ? (cls.advisorId || cls.advisor_id || cls.teacher_id || null) : null
+})
+
+const selectedClassAdvisorName = computed(() => {
+  const id = selectedClassAdvisor.value
+  if (!id) return null
+  const adv = advisorList.value.find(a => Number(a.id) === Number(id))
+  return adv ? adv.name : null
+})
+const advisorList = computed(() => (teachers.value || []).map(t => ({ id: t.id || t.teacherId, name: t.name || t.teacher_name })))
+const majorsList = computed(() => (majors.value || []).map(m => ({ id: m.major_id || m.id, name: m.major_name || m.name })))
+const yearsList = computed(() => (academicYears.value || []).map(y => ({ id: y.academic_year_id || y.id, name: y.academic_year_name || y.name, code: y.code || null })))
 
 const resetForm = () => {
   Object.keys(formData).forEach((key) => {
@@ -262,6 +345,66 @@ const resetForm = () => {
       formData[key] = ''
     }
   })
+  // Ensure parents is always an array after reset
+  formData.parents = []
+  formData.avatarFile = null
+  formData.avatarPreview = null
+}
+
+// helper: use `toInputDate` from utils to normalize date strings for type=date inputs
+
+const addParent = () => {
+  formData.parents.push({ parent_name: '', parent_relationship: '', parent_contact: '' })
+}
+
+const onFileChange = (e) => {
+  const f = e.target.files && e.target.files[0]
+  if (!f) return
+  const allowed = ['image/jpeg', 'image/png', 'image/webp']
+  if (!allowed.includes(f.type)) {
+    alert('Chỉ chấp nhận định dạng: jpg, png, webp')
+    return
+  }
+  const maxBytes = 5 * 1024 * 1024
+  if (f.size > maxBytes) {
+    alert('File quá lớn (tối đa 5MB)')
+    return
+  }
+  // revoke previous preview blob if present
+  if (formData.avatarPreview && typeof formData.avatarPreview === 'string' && formData.avatarPreview.startsWith('blob:')) {
+    try { URL.revokeObjectURL(formData.avatarPreview) } catch (e) {}
+  }
+  formData.avatarFile = f
+  formData.avatarPreview = URL.createObjectURL(f)
+}
+
+const removeAvatar = () => {
+  formData.avatarFile = null
+  if (formData.avatarPreview && typeof formData.avatarPreview === 'string' && formData.avatarPreview.startsWith('blob:')) {
+    try { URL.revokeObjectURL(formData.avatarPreview) } catch (e) {}
+  }
+  formData.avatarPreview = null
+}
+
+const onPreviewError = async (ev, url) => {
+  if (!url) return
+  try {
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) ev.target.src = b
+  } catch (e) {
+    try { ev.target.style.display = 'none' } catch (err) {}
+  }
+}
+
+onBeforeUnmount(() => {
+  if (formData.avatarPreview && typeof formData.avatarPreview === 'string' && formData.avatarPreview.startsWith('blob:')) {
+    try { URL.revokeObjectURL(formData.avatarPreview) } catch (e) {}
+  }
+})
+
+const removeParent = (idx) => {
+  if (!Number.isFinite(idx)) return
+  formData.parents.splice(idx, 1)
 }
 
 watch(
@@ -269,7 +412,49 @@ watch(
   (newStudent) => {
     if (newStudent) {
       isEdit.value = true
-      Object.assign(formData, newStudent)
+      // Normalize incoming shape to our formData - prefer numeric IDs
+      formData.studentCode = newStudent.studentCode || newStudent.userCode || newStudent.student_code || newStudent.user_code || ''
+      formData.fullName = newStudent.fullName || newStudent.student_name || newStudent.user_fullname || ''
+      formData.dateOfBirth = toInputDate(newStudent.dateOfBirth || newStudent.student_birthdate || '')
+      formData.gender = newStudent.gender || newStudent.student_gender || ''
+      formData.email = newStudent.email || newStudent.user_email || ''
+      formData.phoneNumber = newStudent.phoneNumber || newStudent.user_phone || ''
+      formData.identityCard = newStudent.identityCard || newStudent.student_CCCD || ''
+      formData.address = newStudent.address || newStudent.student_address || ''
+      // major: try major_id, then major code, then Major object - normalize to Number if present
+      formData.major = newStudent.major || newStudent.major_id || (newStudent.Major && (newStudent.Major.major_id || newStudent.Major.id)) || (newStudent.major && (newStudent.major.major_id || newStudent.major.id)) || ''
+      formData.major = formData.major === '' ? '' : Number(formData.major)
+      // course / academic year
+      formData.course = newStudent.course || newStudent.academic_year_id || (newStudent.AcademicYear && (newStudent.AcademicYear.academic_year_id || newStudent.AcademicYear.id)) || ''
+      formData.course = formData.course === '' ? '' : Number(formData.course)
+      // officialClass: try numeric id first
+      formData.officialClass = newStudent.officialClass || newStudent.office_class_id || newStudent.officialClassId || newStudent.officeClassId || ''
+      formData.officialClass = formData.officialClass === '' ? '' : Number(formData.officialClass)
+      formData.status = newStudent.status || (newStudent.student_active ? 'studying' : newStudent.status) || 'studying'
+      formData.advisorId = newStudent.advisorId || newStudent.advisor_id || (newStudent.advisor && (newStudent.advisor.id || newStudent.advisor.teacher_id || newStudent.advisor.user_id)) || ''
+      formData.advisorId = formData.advisorId === '' ? '' : Number(formData.advisorId)
+      formData.enrollmentDate = toInputDate(newStudent.enrollmentDate || newStudent.student_day_joined || '')
+      formData.expectedGraduationYear = toInputDate(newStudent.expectedGraduationYear || newStudent.student_year_expected || '')
+      // If backend provides parents as array, pick the first one for single-parent UI
+      // Map array of parents into formData.parents; harmonize various server shapes
+      const parentsRaw = newStudent.parents || newStudent.ParentStudents || newStudent.parent_students || []
+      if (Array.isArray(parentsRaw) && parentsRaw.length) {
+        formData.parents = parentsRaw.map(p => ({
+          parent_name: p.parent_name || p.name || p.parentName || '',
+          parent_relationship: p.parent_relationship || p.relationship || p.parent_relationship || '',
+          parent_contact: p.parent_contact || p.contact || p.parent_phone || p.phone || ''
+        }))
+      } else {
+        // If only single parent fields exist, keep backward compatibility
+        const firstParent = (newStudent.parentName || newStudent.parent_name || newStudent.parent_contact || newStudent.parentPhone || null)
+        if (newStudent.parentName || newStudent.parent_name || newStudent.parent_contact || newStudent.parentPhone) {
+          formData.parents = [{ parent_name: newStudent.parentName || newStudent.parent_name || '', parent_contact: newStudent.parentPhone || newStudent.parent_contact || '', parent_relationship: '' }]
+        } else {
+          formData.parents = []
+        }
+      }
+      formData.notes = newStudent.notes || ''
+      formData.avatarPreview = newStudent.user_avatar || newStudent.avatar || newStudent.user_avatar || (newStudent.user && newStudent.user.user_avatar) || (newStudent.raw && (newStudent.raw.user_avatar || newStudent.raw.avatar)) || null
     } else {
       isEdit.value = false
       resetForm()
@@ -278,8 +463,104 @@ watch(
   { immediate: true }
 )
 
+// When modal opens, fetch lookup data - use allSettled so one failure doesn't prevent the others
+watch(
+  () => props.isOpen,
+  async (open) => {
+    if (open) {
+      try {
+        const results = await Promise.allSettled([
+          fetchMajors(),
+          fetchOfficeClasses({ page: 1, limit: 200 }),
+          fetchAcademicYears({ page: 1, limit: 100 }),
+          fetchTeachers({ page: 1, limit: 500 })
+        ])
+        // Log results for debugging
+        console.debug('[StudentModal] fetch lookup results:', results.map(r => ({ status: r.status, value: r.status === 'fulfilled' ? (r.value && r.value.length ? r.value.length : r.value) : (r.reason && r.reason.message) })))
+        // If office classes result is rejected, still try fetching office classes alone
+        const officeClassesResult = results[1]
+        if (officeClassesResult && officeClassesResult.status === 'rejected') {
+          try {
+            await fetchOfficeClasses({ page: 1, limit: 200 })
+          } catch (err) {
+            console.error('[StudentModal] retry fetchOfficeClasses failed:', err)
+          }
+        }
+      } catch (err) {
+        // General catch - not expected because we use allSettled
+        console.error('[StudentModal] fetch lookup error:', err)
+      }
+    }
+  },
+  { immediate: true }
+)
+
+// Auto-fill email when student code entered (only if email is empty)
+watch(
+  () => formData.studentCode,
+  (code) => {
+    if (!code) return
+    if (!formData.email || formData.email === '') {
+      formData.email = `${code}@gmail.com`
+    }
+  }
+)
+
+// If official class has an advisor, auto-assign and lock advisor select
+watch(
+  () => formData.officialClass,
+  (clsId) => {
+    if (!clsId) return
+    const adv = selectedClassAdvisor.value
+    if (adv) {
+      formData.advisorId = Number(adv)
+    } else {
+      // If selected class has no advisor, clear previous advisor selection
+      formData.advisorId = ''
+    }
+  }
+)
+
+// If major or course changes and selected officialClass no longer in filtered list, clear it
+watch([
+  () => formData.major,
+  () => formData.course
+], ([newMajor, newCourse]) => {
+  const cls = filteredClassList.value.find(c => Number(c.id) === Number(formData.officialClass))
+  if (!cls) {
+    formData.officialClass = ''
+    // Remove advisor assignment only if it was set by class
+    if (advisorLocked.value) formData.advisorId = ''
+  }
+})
+
+// Debug: log when officeClasses changes so we can see if fetch returned data
+watch(officeClasses, (val) => {
+  console.debug('[StudentModal] officeClasses updated:', (val || []).length ? (val.length + ' items') : '0 items')
+})
+
+watch(filteredClassList, (val) => {
+  console.debug('[StudentModal] filteredClassList:', (val || []).length, 'major=', formData.major, 'course=', formData.course)
+})
+
 const handleSubmit = () => {
-  emit('submit', { ...formData })
+  // If creating and password is provided, confirm match; else allow and backend will set default
+  if (!isEdit.value && formData.password) {
+    if (formData.password !== formData.confirmPassword) {
+      alert('Mật khẩu không khớp')
+      return
+    }
+  }
+  // Validate parents array: each item must have name and relationship
+  if (formData.parents && Array.isArray(formData.parents)) {
+    for (const p of formData.parents) {
+      if (!p.parent_name || !p.parent_relationship) {
+        alert('Vui lòng cung cấp họ tên và quan hệ cho tất cả phụ huynh (nếu có)')
+        return
+      }
+    }
+  }
+  emit('submit', { ...formData, parents: formData.parents && formData.parents.length ? formData.parents.map(p => ({ parent_name: p.parent_name, parent_relationship: p.parent_relationship, parent_contact: p.parent_contact })) : undefined, avatarFile: formData.avatarFile })
 }
 
 const close = () => {
@@ -391,10 +672,23 @@ const close = () => {
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
+/* Avatar preview small */
+.avatar-row { margin-bottom: 12px; align-items: center; }
+.avatar-preview-small img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid #e6eef8 }
+.avatar-placeholder-lg { width: 96px; height: 96px; display:flex; align-items:center; justify-content:center; color:#9aa4b2; background: linear-gradient(180deg,#f3f6fb,#f9fbff); border-radius:8px; border:1px dashed #e6eef8 }
+.avatar-actions-col .btn-upload { display:inline-flex; align-items:center; gap:8px; background:#eef2ff; color:#3730a3; padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600; border:1px solid rgba(99,102,241,0.12) }
+.avatar-actions-col .btn-upload input { display:none }
+.btn-remove-avatar{background:#fff;border:1px solid #f3f4f6;padding:6px 10px;border-radius:6px;cursor:pointer;margin-left:8px}
 
 .form-group {
   display: flex;
   flex-direction: column;
+}
+
+.class-advisor-note {
+  font-size: 0.9rem;
+  color: #374151;
+  margin-top: 8px;
 }
 
 .form-group.full-width {
