@@ -105,6 +105,28 @@
           @view:details="viewScheduleDetails"
         />
       </div>
+
+      <div v-if="activeTab === 'table'" class="schedule-view">
+        <div class="table-filters" style="display:flex; gap:12px; padding:12px; align-items:center;">
+          <label style="font-weight:600; color:#374151">Từ ngày</label>
+          <input type="date" v-model="fromDate" />
+          <label style="font-weight:600; color:#374151">Đến ngày</label>
+          <input type="date" v-model="toDate" />
+          <button @click="applyDateRange" class="btn-primary" style="height:36px; padding:8px 12px;">Áp dụng</button>
+        </div>
+
+        <ScheduleTable
+          :occurrences="tableOccurrences"
+          :loading="loading"
+          :page="tablePage"
+          :limit="tableLimit"
+          :totalCount="tableOccurrences.length"
+          @edit:schedule="editSchedule"
+          @duplicate:schedule="editSchedule"
+          @delete:schedule="deleteSchedule"
+          @page:change="onTablePageChange"
+        />
+      </div>
     </div>
 
     <ScheduleModal 
@@ -183,16 +205,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import ScheduleStats from '@/components/Schedule-Staff/ScheduleStats.vue'
 import ScheduleFilters from '@/components/Schedule-Staff/ScheduleFilters.vue'
-import WeeklyCalendar from '@/components/Schedule-Staff/WeeklyCalendar.vue'
-import ExamCalendar from '@/components/Schedule-Staff/ExamCalendar.vue'
-import MonthlyCalendar from '@/components/Schedule-Staff/MonthlyCalendar.vue'
 import ScheduleTable from '@/components/Schedule-Staff/ScheduleTable.vue'
-import WeeklyListView from '@/components/Schedule-Staff/WeeklyListView.vue'
 import ScheduleModal from '@/components/Schedule-Staff/ScheduleModal.vue'
-import ExamModal from '@/components/Schedule-Staff/ExamModal.vue'
 import ScheduleDetailsModal from '@/components/Schedule-Staff/ScheduleDetailsModal.vue'
 import ConflictCheckerModal from '@/components/Schedule-Staff/ConflictCheckerModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -201,13 +218,14 @@ import { useCourseClasses } from '@/hooks/useCourseClasses'
 import { useTeachers } from '@/hooks/useTeachers'
 import shareService from '@/services/shareService'
 import useCourseSchedules from '@/hooks/useCourseSchedules'
+import { parseISODateToLocal, toInputDate } from '@/utils/formatters'
 import { useToast } from '@/composables/useToast'
 
 export default {
   name: 'Schedule',
   components: {
-    ScheduleStats, ScheduleFilters, WeeklyCalendar, ExamCalendar, MonthlyCalendar,
-    ScheduleTable, WeeklyListView, ScheduleModal, ExamModal, ScheduleDetailsModal,
+    ScheduleStats, ScheduleFilters,
+    ScheduleTable, ScheduleModal, ScheduleDetailsModal,
     ConflictCheckerModal, ConfirmDialog
   },
 setup() {
@@ -440,19 +458,24 @@ setup() {
     }
 
     // 5. Reload Schedules
-    const reloadAllSchedules = async () => {
+    const reloadAllSchedules = async ({ start_date = '', end_date = '' } = {}) => {
+      loading.value = true
       try {
         const [study, exam] = await Promise.all([
-          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study' }),
-          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam' })
+          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'study', start_date, end_date }),
+          fetchCourseSchedules({ page: 1, limit: 500, schedule_type: 'exam', start_date, end_date })
         ])
         const studyRows = Array.isArray(study) ? study : study.data || []
         const examRows = Array.isArray(exam) ? exam : exam.data || []
         
         classSchedules.value = studyRows.map(enrichSchedule)
         examSchedules.value = examRows.map(enrichSchedule)
+        // Recompute table occurrences if currently viewing table
+        if (activeTab.value === 'table') applyDateRange()
       } catch (err) {
         console.error('Failed to reload schedules:', err)
+      } finally {
+        loading.value = false
       }
     }
 
@@ -646,7 +669,8 @@ setup() {
       { key: 'class', label: 'Lịch học', icon: 'fas fa-chalkboard-teacher', count: classSchedules.value.length },
       { key: 'exam', label: 'Lịch thi', icon: 'fas fa-file-alt', count: examSchedules.value.length },
       { key: 'monthly', label: 'Lịch tháng', icon: 'fas fa-calendar-alt', count: filteredAllSchedules.value.length },
-      { key: 'list', label: 'Danh sách', icon: 'fas fa-list', count: filteredAllSchedules.value.length }
+      { key: 'list', label: 'Danh sách', icon: 'fas fa-list', count: filteredAllSchedules.value.length },
+      { key: 'table', label: 'Bảng - Theo ngày', icon: 'fas fa-table', count: filteredAllSchedules.value.length }
     ])
     const statistics = computed(() => ({ 
       totalSchedules: classSchedules.value.length + examSchedules.value.length, 
@@ -656,6 +680,115 @@ setup() {
     }))
 
     onMounted(loadData)
+
+    // Date range & table occurrences
+    const fromDate = ref(toInputDate(new Date()))
+    const toDate = ref(toInputDate(new Date(new Date().setDate(new Date().getDate() + 14))))
+    const tableOccurrences = ref([])
+    const tablePage = ref(1)
+    const tableLimit = ref(50)
+
+    const computeOccurrencesFromSchedules = (list = [], fromIso, toIso) => {
+      if (!Array.isArray(list)) return []
+      const from = parseISODateToLocal(fromIso) || parseISODateToLocal(toIso) || parseISODateToLocal(new Date())
+      const to = parseISODateToLocal(toIso) || parseISODateToLocal(fromIso) || parseISODateToLocal(new Date())
+      if (!from || !to) return []
+
+      const out = []
+      for (const s of list) {
+        // Determine schedule date range (parent)
+        const parentStart = parseISODateToLocal(s.startDate || s.start_date) || null
+        const parentEnd = parseISODateToLocal(s.endDate || s.end_date) || null
+        const minDate = parentStart ? (parentStart > from ? parentStart : from) : from
+        const maxDate = parentEnd ? (parentEnd < to ? parentEnd : to) : to
+        if (minDate > maxDate) continue
+
+        // Use schedule.dayOfWeek for flattened items, fallback to schedule.scheduleDays
+        const days = []
+        if (s.dayOfWeek !== undefined && s.dayOfWeek !== null) {
+          days.push({ day: Number(s.dayOfWeek), slots: [s.slotNumber || s.slot_number] })
+        } else if (Array.isArray(s.scheduleDays) && s.scheduleDays.length > 0) {
+          for (const d of s.scheduleDays) {
+            const slots = d.slots || d.timeSlots || d.CourseScheduleSlots || []
+            days.push({ day: d.day || d.weekdayId || d.weekday_id || d.dayOfWeek, slots: Array.isArray(slots) ? slots.map(x => Number(x.slot_number || x || x.slotNumber || x)) : [] })
+          }
+        }
+
+        const normalizeWeekday = (w) => {
+          if (w === undefined || w === null) return null
+          const v = Number(w)
+          if (Number.isNaN(v)) return null
+          if (v === 0) return 0
+          if (v >= 2 && v <= 8) {
+            const m = v === 8 ? 7 : v - 1
+            return m === 7 ? 0 : m
+          }
+          if (v >= 1 && v <= 7) return v === 7 ? 0 : v
+          return v
+        }
+
+        for (const d of days) {
+          const weekday = normalizeWeekday(d.day)
+          if (Number.isNaN(weekday)) continue
+          // iterate from minDate to maxDate, stepping 1-7 days to match day
+          // find first date >= minDate with same weekday
+          const cur = new Date(minDate.getTime())
+          while (cur.getDay() !== weekday) {
+            cur.setDate(cur.getDate() + 1)
+            if (cur > maxDate) break
+          }
+          if (cur > maxDate) continue
+
+          for (let dt = new Date(cur.getTime()); dt <= maxDate; dt.setDate(dt.getDate() + 7)) {
+            for (const slot of (d.slots || [])) {
+              // Derive start/end times using helper map from hook if present (common mapping keys)
+              const startTime = s.startTime || s.start_time || ''
+              const endTime = s.endTime || s.end_time || ''
+
+              out.push({
+                occurrenceId: `${s.id || s.scheduleId || s.schedule_id}-${d.day}-${slot}`,
+                scheduleId: s.id || s.scheduleId || s.schedule_id,
+                date: toInputDate(dt),
+                dayOfWeek: d.day,
+                slotNumber: slot,
+                startTime: startTime,
+                endTime: endTime,
+                timeSlot: s.timeSlot || s.time_slot || s.slotTime || '',
+                subjectName: s.subjectName || s.subject_name || s.CourseClass?.name || s.name || '',
+                subjectCode: s.subjectCode || s.subject_code || s.CourseClass?.subject_code || s.code || '',
+                roomName: s.roomName || s.room_name || s.Room?.name || '',
+                teacherName: s.teacherName || s.teacher_name || s.Teacher?.name || '',
+                status: s.status || s.scheduleType || s.schedule_type || 'scheduled',
+                raw: s
+              })
+            }
+          }
+        }
+      }
+      // sort
+      return out.sort((a, b) => new Date(a.date + 'T' + (a.startTime || '00:00')) - new Date(b.date + 'T' + (b.startTime || '00:00')))
+    }
+
+    const applyDateRange = async () => {
+      try {
+        // Refresh server data to limit results while also computing occurrences client-side
+        await reloadAllSchedules({ start_date: fromDate.value, end_date: toDate.value })
+        const base = filteredAllSchedules.value || []
+        tableOccurrences.value = computeOccurrencesFromSchedules(base, fromDate.value, toDate.value)
+      } catch (e) {
+        console.error('Failed to compute table occurrences', e)
+      }
+    }
+
+    const onTablePageChange = ({ page, limit }) => {
+      tablePage.value = page || tablePage.value
+      tableLimit.value = limit || tableLimit.value
+    }
+
+    // recompute when schedules or filters or dates change
+    watch([filteredAllSchedules, fromDate, toDate], () => {
+      applyDateRange()
+    }, { immediate: true })
 
     return {
       loading, activeTab, tabs, statistics, filters, 
@@ -673,6 +806,8 @@ setup() {
       saveSchedule, saveExam,
       viewScheduleDetails, viewExamDetails, editFromDetails,
       exportSchedule, openConflictChecker,
+      // Table view controls
+      fromDate, toDate, tableOccurrences, tablePage, tableLimit, applyDateRange, onTablePageChange,
       closeScheduleModal, closeExamModal, closeDetailsModal, closeDeleteScheduleModal,
       confirmDeleteSchedule, closeUpdateScheduleModal, closeUpdateExamModal,
       confirmUpdateSchedule, confirmUpdateExam, closeConflictModal, resolveConflict

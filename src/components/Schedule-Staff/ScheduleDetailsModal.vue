@@ -56,7 +56,7 @@
               </div>
               <div v-if="scheduleType === 'exam'" class="info-item">
                 <label>Đã đăng ký:</label>
-                <span>{{ schedule.registeredStudents || 0 }} sinh viên</span>
+                <span>{{ schedule.registeredStudents || 'chưa có' }} sinh viên</span>
               </div>
             </div>
           </div>

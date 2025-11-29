@@ -24,79 +24,62 @@
       <table class="table">
         <thead>
           <tr>
-            <th @click="sort('subjectName')" class="sortable">
-              Môn học
-              <i :class="getSortIcon('subjectName')"></i>
-            </th>
-            <th @click="sort('type')" class="sortable">
-              Loại
-              <i :class="getSortIcon('type')"></i>
-            </th>
-            <th @click="sort('date')" class="sortable">
-              Ngày
-              <i :class="getSortIcon('date')"></i>
-            </th>
             <th @click="sort('startTime')" class="sortable">
-              Giờ
+              Giờ (Tiết)
               <i :class="getSortIcon('startTime')"></i>
             </th>
-            <th v-if="!isCompactView" @click="sort('teacherName')" class="sortable">
-              Giáo viên
-              <i :class="getSortIcon('teacherName')"></i>
+            <th @click="sort('subjectName')" class="sortable">
+              Tên môn
+              <i :class="getSortIcon('subjectName')"></i>
+            </th>
+            <th @click="sort('subjectCode')" class="sortable">
+              Mã lớp/Mã MH
+              <i :class="getSortIcon('subjectCode')"></i>
             </th>
             <th @click="sort('roomName')" class="sortable">
               Phòng
               <i :class="getSortIcon('roomName')"></i>
             </th>
+            <th @click="sort('teacherName')" class="sortable">
+              Giáo viên
+              <i :class="getSortIcon('teacherName')"></i>
+            </th>
+            <th @click="sort('status')" class="sortable">
+              Trạng thái
+              <i :class="getSortIcon('status')"></i>
+            </th>
             <th class="actions-col">Thao tác</th>
           </tr>
         </thead>
         <tbody>
-          <tr 
-            v-for="schedule in sortedSchedules" 
-            :key="`${schedule.type}-${schedule.id}`"
-            class="table-row"
-            :class="getRowClass(schedule)"
-          >
-            <!-- Subject -->
-            <td class="subject-cell">
-              <div class="subject-info">
-                <div class="subject-name">{{ schedule.subjectName }}</div>
-                <div class="subject-code">{{ schedule.subjectCode }}</div>
-              </div>
-            </td>
-
-            <!-- Type -->
-            <td class="type-cell">
-              <span class="type-badge" :class="schedule.type">
-                <i :class="getTypeIcon(schedule)"></i>
-                {{ getTypeName(schedule) }}
-              </span>
-            </td>
-
-            <!-- Date -->
-            <td class="date-cell">
-              <div class="date-info">
-                <div class="date">{{ formatDate(schedule.date) }}</div>
-                <div class="day-name">{{ getDayName(schedule.date) }}</div>
-              </div>
-            </td>
-
+          <template v-for="group in groupedDates" :key="group.date">
+            <tr class="group-header">
+              <td :colspan="7" class="group-header-cell">{{ formatDate(group.date) }} ({{ group.items.length }})</td>
+            </tr>
+            <tr 
+              v-for="schedule in group.items" 
+              :key="schedule.occurrenceId || `${schedule.type}-${schedule.id}`"
+              class="table-row"
+              :class="getRowClass(schedule)"
+            >
             <!-- Time -->
             <td class="time-cell">
               <div class="time-info">
-                <div class="time-range">{{ schedule.startTime }} - {{ schedule.endTime }}</div>
+                <div class="time-range">{{ schedule.startTime || schedule.timeSlot }}{{ schedule.startTime ? ' - ' + (schedule.endTime || '') : '' }}</div>
                 <div v-if="schedule.timeSlot" class="time-slot">{{ schedule.timeSlot }}</div>
               </div>
             </td>
 
-            <!-- Teacher -->
-            <td v-if="!isCompactView" class="teacher-cell">
-              <div v-if="schedule.teacherName" class="teacher-info">
-                <i class="fas fa-user"></i>
-                {{ schedule.teacherName }}
+            <!-- Subject Name -->
+            <td class="subject-cell">
+              <div class="subject-info">
+                <div class="subject-name">{{ schedule.subjectName }}</div>
               </div>
-              <span v-else class="no-teacher">Chưa phân công</span>
+            </td>
+
+            <!-- Subject Code / Class Code -->
+            <td class="code-cell">
+              <div class="subject-code">{{ schedule.subjectCode || schedule.courseClassSKU || '' }}</div>
             </td>
 
             <!-- Room -->
@@ -106,6 +89,22 @@
                 {{ schedule.roomName }}
               </div>
               <span v-else class="no-room">Chưa xếp phòng</span>
+            </td>
+
+            <!-- Teacher -->
+            <td class="teacher-cell">
+              <div v-if="schedule.teacherName" class="teacher-info">
+                <i class="fas fa-user"></i>
+                {{ schedule.teacherName }}
+              </div>
+              <span v-else class="no-teacher">Chưa phân công</span>
+            </td>
+
+            <!-- Status -->
+            <td class="status-cell">
+              <span class="status-badge" :class="schedule.status || schedule.scheduleType || schedule.schedule_type">
+                {{ getStatusLabel(schedule.status || schedule.scheduleType || schedule.schedule_type) }}
+              </span>
             </td>
 
             <!-- Actions -->
@@ -134,12 +133,13 @@
                 </button>
               </div>
             </td>
-          </tr>
+            </tr>
+          </template>
         </tbody>
       </table>
 
       <!-- Empty State -->
-      <div v-if="schedules.length === 0" class="empty-table">
+      <div v-if="occurrences.length === 0" class="empty-table">
         <div class="empty-icon">
           <i class="fas fa-calendar-times"></i>
         </div>
@@ -179,7 +179,7 @@
       </button>
       
       <div class="page-info">
-        <span>{{ ((currentPage - 1) * pageSize + 1) }}-{{ Math.min(currentPage * pageSize, props.totalCount || props.schedules.length) }} / {{ props.totalCount || props.schedules.length }}</span>
+        <span>{{ ((currentPage - 1) * pageSize + 1) }}-{{ Math.min(currentPage * pageSize, props.totalCount || props.occurrences.length) }} / {{ props.totalCount || props.occurrences.length }}</span>
       </div>
     </div>
   </div>
@@ -191,7 +191,7 @@ import { ref, computed, watch } from 'vue'
 export default {
   name: 'ScheduleTable',
   props: {
-    schedules: {
+    occurrences: {
       type: Array,
       default: () => []
     },
@@ -229,7 +229,7 @@ export default {
     })
 
     const sortedSchedules = computed(() => {
-      const sorted = [...props.schedules].sort((a, b) => {
+      const sorted = [...props.occurrences].sort((a, b) => {
         let valueA = a[sortBy.value]
         let valueB = b[sortBy.value]
 
@@ -260,7 +260,7 @@ export default {
 
     const totalPages = computed(() => {
       if (props.totalCount && pageSize.value) return Math.ceil(props.totalCount / pageSize.value)
-      return Math.ceil(props.schedules.length / pageSize.value)
+      return Math.ceil(props.occurrences.length / pageSize.value)
     })
 
     const visiblePages = computed(() => {
@@ -369,6 +369,17 @@ export default {
       }
     }
 
+    const groupedDates = computed(() => {
+      // Build groups using the current page window (sortedSchedules) so pagination shows grouped rows
+      const groups = {}
+      for (const o of sortedSchedules.value) {
+        const d = o.date || o.startDate || ''
+        if (!groups[d]) groups[d] = []
+        groups[d].push(o)
+      }
+      return Object.keys(groups).sort((a, b) => new Date(a) - new Date(b)).map(key => ({ date: key, items: groups[key] }))
+    })
+
     return {
       isCompactView,
       sortBy,
@@ -376,6 +387,7 @@ export default {
       currentPage,
       pageSize,
       sortedSchedules,
+      groupedDates,
       totalPages,
       visiblePages,
       toggleView,
@@ -529,6 +541,15 @@ export default {
   background: #fef2f2;
 }
 
+.group-header {
+  background: #eef2ff;
+}
+.group-header-cell {
+  padding: 12px 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .subject-info .subject-name {
   font-weight: 600;
   color: #0f172a;
@@ -548,6 +569,18 @@ export default {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
+}
+
+.code-cell, .code-col {
+  width: 120px;
+}
+
+.status-cell {
+  width: 120px;
+}
+
+.actions-col {
+  width: 120px;
 }
 
 .type-badge.class {

@@ -6,13 +6,15 @@ let API_BASE_URL = String(_rawBase || '/api')
 if (!API_BASE_URL.includes('/api')) API_BASE_URL = API_BASE_URL.replace(/\/+$/, '') + '/api'
 
 class ScheduleService {
-  async listCourseSchedules({ page = 1, limit = 20, course_class_id = '', schedule_type = '', q = '' } = {}) {
+  async listCourseSchedules({ page = 1, limit = 20, course_class_id = '', schedule_type = '', q = '', start_date = '', end_date = '' } = {}) {
     try {
       const url = new URL(`${API_BASE_URL}/share/course-schedules`, window.location.origin)
       url.searchParams.set('page', page)
       url.searchParams.set('limit', limit)
       if (course_class_id) url.searchParams.set('course_class_id', course_class_id)
       if (schedule_type) url.searchParams.set('schedule_type', schedule_type)
+      if (start_date) url.searchParams.set('start_date', start_date)
+      if (end_date) url.searchParams.set('end_date', end_date)
       if (q) url.searchParams.set('q', q)
 
       const res = await fetch(url.toString(), { method: 'GET', credentials: 'include', headers: { 'Content-Type': 'application/json' } })
