@@ -11,7 +11,6 @@
     </div>
 
     <div class="page-content">
-      <!-- Statistics -->
       <div class="stats-grid">
         <div class="stat-card">
           <i class="fas fa-users"></i>
@@ -43,7 +42,6 @@
         </div>
       </div>
 
-      <!-- Filters -->
       <div class="filters-section">
         <div class="filters-container">
           <div class="filter-group">
@@ -88,7 +86,6 @@
         </div>
       </div>
 
-      <!-- Classes Grid -->
       <div v-if="classesLoading" class="loading-state">
         <p>Đang tải danh sách lớp...</p>
       </div>
@@ -137,7 +134,7 @@
               </div>
               <div class="info-item">
                 <i class="fas fa-calendar"></i>
-                <span>Khóa {{ getClassAcademicYearLabel(officialClass) || getAcademicYearLabel(officialClass.course) || officialClass.course || 'Chưa có Khóa' }}</span>
+                <span>Khóa {{ officialClass.academicYearName || getAcademicYearLabel(officialClass.course) || officialClass.course || 'Chưa có Khóa' }}</span>
               </div>
             </div>
 
@@ -181,7 +178,6 @@
       </div>
     </div>
 
-    <!-- Official Class Modal -->
     <OfficialClassModal
       :isOpen="showClassModal"
       :officialClass="selectedClass"
@@ -209,7 +205,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import OfficialClassModal from '@/components/Students-Manager/OfficialClassModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useToast } from '@/composables/useToast'
@@ -219,9 +215,8 @@ import { useAcademicYears } from '@/hooks/useAcademicYears'
 import { useMajors } from '@/hooks/useMajors'
 
 // State
-const { officeClasses, fetchOfficeClasses, createOfficeClass, updateOfficeClass, deleteOfficeClass, loading: classesLoading, error: classesError } = useOfficeClasses()
-const classes = officeClasses
-  const { teachers, fetchTeachers } = useTeachers()
+const { officeClasses, fetchOfficeClasses, getOfficeClass, createOfficeClass, updateOfficeClass, deleteOfficeClass, loading: classesLoading, error: classesError } = useOfficeClasses()
+const { teachers, fetchTeachers } = useTeachers()
 const { academicYears, fetchAcademicYears } = useAcademicYears()
 const { majors, fetchMajors } = useMajors()
 const filters = ref({
@@ -244,9 +239,7 @@ const confirmLoading = ref(false)
 
 // Initialize data from server
 onMounted(async () => {
-  // Use allSettled so one failing lookup (e.g. majors) doesn't break the whole page
   try {
-    // Ensure academicYears is fetched before office classes to allow mapping
     const [ayRes] = await Promise.allSettled([fetchAcademicYears()])
     if (ayRes && ayRes.status === 'rejected') console.warn('Failed to fetch academic years', ayRes)
     const results = await Promise.allSettled([
@@ -254,11 +247,8 @@ onMounted(async () => {
       fetchTeachers(),
       fetchMajors()
     ])
-    // Try to attach AcademicYear objects to classes if we have the lookup
-    attachAcademicYearsToClasses()
     const rejected = results.filter(r => r.status === 'rejected')
     if (rejected.length) {
-      // Hooks already show toasts; log for debugging
       console.warn('Some lookups failed during Classes initialization.' , rejected)
     }
   } catch (err) {
@@ -266,36 +256,50 @@ onMounted(async () => {
   }
 })
 
-// Re-attach academic years to classes whenever academicYears lookup updates
-watch(academicYears, (newVal) => {
-  if (newVal && newVal.length) attachAcademicYearsToClasses()
-})
-
-// When the classes list is updated (e.g., after create/update/delete), re-attach academicYears
-watch(classes, (newVal) => {
-  if (newVal && newVal.length) attachAcademicYearsToClasses()
-})
-
 const retryClasses = async () => {
   try {
     await fetchOfficeClasses()
-    // After fetching, try to attach AcademicYear objects based on resolved academic_year_id/course
-    attachAcademicYearsToClasses()
   } catch (err) {
     console.error('Retry fetch classes error:', err)
   }
 }
 
+// FIX: Computed property to handle data merging safely (avoids infinite watch loop)
+const processedClasses = computed(() => {
+  if (!officeClasses.value) return []
+  return officeClasses.value.map(c => {
+    const out = { ...c }
+    const id = c.academic_year_id || c.academicYearId || c.course
+    
+    // Attach Academic Year Logic here inside computed
+    if (id && academicYears.value?.length) {
+      const ay = academicYears.value.find(a => Number(a.id) === Number(id))
+      if (ay) {
+        out.AcademicYear = ay
+        out.academicYearName = ay.name || ay.academic_year_name || ''
+      } else {
+        const s = String(id)
+        const ay2 = academicYears.value.find(a => (a.name || a.academic_year_name || '').includes(s))
+        if (ay2) {
+          out.AcademicYear = ay2
+          out.academicYearName = ay2.name || ay2.academic_year_name || ''
+        }
+      }
+    }
+    return out
+  })
+})
+
 // Computed
 const statistics = computed(() => ({
-  totalClasses: classes.value.length,
-  activeClasses: classes.value.filter((c) => c.status === 'active').length,
-  totalStudents: classes.value.reduce((sum, c) => sum + (c.studentCount || 0), 0),
-  totalAdvisors: new Set(classes.value.map((c) => c.advisorId).filter(Boolean)).size
+  totalClasses: processedClasses.value.length,
+  activeClasses: processedClasses.value.filter((c) => c.status === 'active').length,
+  totalStudents: processedClasses.value.reduce((sum, c) => sum + (c.studentCount || 0), 0),
+  totalAdvisors: new Set(processedClasses.value.map((c) => c.advisorId).filter(Boolean)).size
 }))
 
 const filteredClasses = computed(() => {
-  let result = classes.value
+  let result = processedClasses.value
 
   if (filters.value.search) {
     const search = filters.value.search.toLowerCase()
@@ -336,38 +340,17 @@ const getMajorLabel = (major) => {
 
 const getAcademicYearLabel = (courseOrId) => {
   if (courseOrId === undefined || courseOrId === null || courseOrId === '') return ''
-  // If courseOrId is numeric id
   const asNumber = Number(courseOrId)
   if (!isNaN(asNumber) && academicYears?.value && academicYears.value.length) {
     const ay = academicYears.value.find(a => Number(a.id) === asNumber)
     if (ay) return ay.name || ay.academic_year_name || String(courseOrId)
   }
-  // Try matching by name
   const s = String(courseOrId).trim()
   if (academicYears?.value && academicYears.value.length) {
     const ay = academicYears.value.find(a => (a.name || a.academic_year_name || '').toLowerCase() === s.toLowerCase() || (a.name || a.academic_year_name || '').toLowerCase().includes(s.toLowerCase()))
     if (ay) return ay.name || ay.academic_year_name
   }
-  // fallback: show original value
   return String(courseOrId)
-}
-
-const getClassAcademicYearLabel = (officialClass) => {
-  if (!officialClass) return ''
-  console.debug('[Classes] getClassAcademicYearLabel ->', officialClass)
-  // Prefer included AcademicYear object under several possible keys
-  const ayObj = officialClass.AcademicYear || officialClass.academicYear || officialClass.academic_year || officialClass._AcademicYear || null
-  if (ayObj) return ayObj.name || ayObj.academic_year_name || ayObj.academicYearName || ''
-  // If the mapping included a precomputed name
-  if (officialClass.academicYearName) return officialClass.academicYearName
-  // Try academic_year_id numeric match
-  if (officialClass.academic_year_id || officialClass.academicYearId || officialClass.academicYearID || officialClass.academic_year || officialClass.academic_year_id === 0) {
-    const id = officialClass.academic_year_id || officialClass.academicYearId || officialClass.academicYearID
-    if (id) return getAcademicYearLabel(id)
-  }
-  // fallback to course -> year label
-  if (officialClass.course) return getAcademicYearLabel(officialClass.course)
-  return ''
 }
 
 const getStatusLabel = (status) => {
@@ -383,36 +366,45 @@ const openAddModal = () => {
   selectedClass.value = null
   serverErrors.value = {}
   isViewMode.value = false
-  // Ensure lookups are loaded before opening modal
   Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
     showClassModal.value = true
   })
 }
 
-const editClass = (officialClass) => {
-  console.debug('[Classes] editClass -> officialClass:', officialClass)
-  selectedClass.value = { ...officialClass }
+// Fetch full details (including students) before opening modal
+const editClass = async (officialClass) => {
+  try {
+    const detailedClass = await getOfficeClass(officialClass.id)
+    selectedClass.value = detailedClass
+  } catch (err) {
+    console.error('Failed to fetch class details:', err)
+    selectedClass.value = { ...officialClass }
+  }
+  
   serverErrors.value = {}
   isViewMode.value = false
-  // Ensure lookups are loaded before opening modal
   Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
     showClassModal.value = true
   })
 }
 
-const viewClass = (officialClass) => {
-  console.debug('[Classes] viewClass -> officialClass:', officialClass)
-  selectedClass.value = { ...officialClass }
+const viewClass = async (officialClass) => {
+  try {
+    const detailedClass = await getOfficeClass(officialClass.id)
+    selectedClass.value = detailedClass
+  } catch (err) {
+    console.error('Failed to fetch class details:', err)
+    selectedClass.value = { ...officialClass }
+  }
+
   serverErrors.value = {}
   isViewMode.value = true
-  // Ensure lookups are loaded before opening modal
   Promise.allSettled([fetchTeachers(), fetchMajors(), fetchAcademicYears()]).then(() => {
     showClassModal.value = true
   })
 }
 
 const manageStudents = (officialClass) => {
-  // Open modal to manage students in this class
   editClass(officialClass)
 }
 
@@ -427,36 +419,7 @@ const deleteClass = (officialClass) => {
   }
 }
 
-// Attach AcademicYear object and human-friendly name to each class in classes list,
-// using available academicYears lookup. This is done as a post-processing step
-// because the server's list endpoint may not include the nested AcademicYear object.
-const attachAcademicYearsToClasses = () => {
-  if (!academicYears?.value || !academicYears.value.length) return
-  classes.value = classes.value.map(c => {
-    const out = { ...c }
-    const id = c.academic_year_id || c.academicYearId || c.course
-    if (id) {
-      const ay = academicYears.value.find(a => Number(a.id) === Number(id))
-      if (ay) {
-        out.AcademicYear = ay
-        out.academicYearName = ay.name || ay.academic_year_name || out.academicYearName || ''
-      }
-      // If no exact match, try to match by year string contained in name
-      else {
-        const s = String(id)
-        const ay2 = academicYears.value.find(a => (a.name || a.academic_year_name || '').includes(s))
-        if (ay2) {
-          out.AcademicYear = ay2
-          out.academicYearName = ay2.name || ay2.academic_year_name || out.academicYearName || ''
-        }
-      }
-    }
-    return out
-  })
-}
-
 const performDelete = async () => {
-  console.debug('[Classes] performDelete called ->', confirmDialog.value && confirmDialog.value.payload ? confirmDialog.value.payload.id : null)
   const cls = confirmDialog.value.payload
   if (!cls) return
   confirmDialog.value.show = false
@@ -465,7 +428,6 @@ const performDelete = async () => {
   try {
     confirmLoading.value = true
     await deleteOfficeClass(cls.id)
-    console.debug('[Classes] deleteOfficeClass response -> deleted id', cls.id)
     toast.success('Xóa lớp thành công', 'Thành công')
     if (selectedClass.value && selectedClass.value.id === cls.id) closeClassModal()
   } catch (err) {
@@ -479,7 +441,6 @@ const handleSubmitClass = async (classData) => {
   serverErrors.value = {}
   saving.value = true
   try {
-    // Basic pre-checks before calling API
     if (!classData.advisorId) {
       serverErrors.value = { teacher_id: 'Cố vấn học tập bắt buộc' }
       return
@@ -494,7 +455,6 @@ const handleSubmitClass = async (classData) => {
     }
 
     if (selectedClass.value && selectedClass.value.id) {
-      // Ask for confirmation before updating
       confirmDialog.value = {
         show: true,
         type: 'warning',
@@ -509,7 +469,6 @@ const handleSubmitClass = async (classData) => {
       closeClassModal()
     }
   } catch (err) {
-    // Map server validation errors to serverErrors for modal display
     let mapped = {}
     if (Array.isArray(err?.details)) {
       err.details.forEach(d => {
@@ -518,7 +477,6 @@ const handleSubmitClass = async (classData) => {
     } else if (err?.details && typeof err.details === 'object') {
       mapped = err.details
     } else if (err && typeof err === 'object') {
-      // If server returned stringified JSON in message, try parse
       try {
         const parsed = JSON.parse(err.message)
         if (parsed?.details && Array.isArray(parsed.details)) parsed.details.forEach(d => mapped[d.field] = d.message)
@@ -534,7 +492,6 @@ const handleSubmitClass = async (classData) => {
 }
 
 const performUpdate = async () => {
-  console.debug('[Classes] performUpdate called ->', confirmDialog.value && confirmDialog.value.payload ? confirmDialog.value.payload.id : null)
   const payload = confirmDialog.value.payload
   if (!payload) return
   confirmDialog.value.show = false
@@ -557,13 +514,12 @@ const performUpdate = async () => {
 }
 
 const onConfirm = () => {
-  console.debug('[Classes] onConfirm ->', confirmDialog.value)
   if (!confirmDialog.value || !confirmDialog.value.payload) return
   if (confirmDialog.value.action === 'update') performUpdate()
   else performDelete()
 }
 
-  const getAdvisorName = (advisorId) => {
+const getAdvisorName = (advisorId) => {
   const adv = teachers.value.find(t => (t.teacher_id || t.id) === advisorId)
   return adv ? (adv.display || adv.name || adv.user_name || '') : ''
 }

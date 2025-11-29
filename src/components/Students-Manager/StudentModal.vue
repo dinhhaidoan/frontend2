@@ -90,13 +90,13 @@
 
               <!-- Password (only when creating account) -->
               <div v-if="!isEdit" class="form-group">
-                <label>Mật khẩu <span class="required">*</span></label>
-                <input v-model="formData.password" type="password" placeholder="Mật khẩu" required />
+                <label>Mật khẩu</label>
+                <input v-model="formData.password" type="password" placeholder="Mặc định 123456789 nếu để trống" />
               </div>
 
               <div v-if="!isEdit" class="form-group">
-                <label>Xác nhận mật khẩu <span class="required">*</span></label>
-                <input v-model="formData.confirmPassword" type="password" placeholder="Xác nhận mật khẩu" required />
+                <label>Xác nhận mật khẩu</label>
+                <input v-model="formData.confirmPassword" type="password" placeholder="Mặc định 123456789 nếu để trống" />
               </div>
 
               <div class="form-group">
@@ -150,8 +150,8 @@
               </div>
 
               <div class="form-group">
-                <label>Lớp hành chính <span class="required">*</span></label>
-                <select v-model="formData.officialClass" :disabled="classesLoading" required>
+                <label>Lớp hành chính</label>
+                <select v-model="formData.officialClass" :disabled="classesLoading">
                   <option value="">{{ classesLoading ? 'Đang tải danh sách lớp...' : 'Chọn lớp' }}</option>
                   <option v-for="cls in filteredClassList" :key="cls.id" :value="cls.id">{{ cls.code || cls.name }}</option>
                 </select>
