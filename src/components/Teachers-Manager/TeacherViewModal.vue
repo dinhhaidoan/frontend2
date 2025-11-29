@@ -17,7 +17,7 @@
           <div class="profile-header">
             <div class="avatar">
               <img
-                v-if="teacher?.avatar && (!(_failed && _failed.has && _failed.has(teacher.avatar)) || (_blobMap && _blobMap.value && _blobMap.value.has(teacher.avatar)))"
+                v-if="teacher?.avatar && (! (avatarFailedSet && avatarFailedSet.has && avatarFailedSet.has(teacher.avatar)) || (avatarBlobMap && avatarBlobMap.value && avatarBlobMap.value.has(teacher.avatar)))"
                 :src="avatarSrc(teacher.avatar)"
                 :alt="teacher?.name"
                 @error="onAvatarError($event, teacher.avatar)"
@@ -122,88 +122,57 @@
             
             <!-- Subjects Tab -->
             <div v-if="activeTab === 'subjects'" class="tab-panel">
-              <div class="subjects-section">
-                <div class="section-header">
-                  <h4>Danh sách môn học đang giảng dạy</h4>
-                  <div class="section-actions">
-                    <button @click="refreshSubjects" class="btn-refresh">
-                      <i class="fas fa-sync"></i>
-                      Làm mới
-                    </button>
-                  </div>
-                </div>
-                
-                <div v-if="teacherSubjects.length > 0" class="subjects-list">
-                  <div 
-                    v-for="subject in teacherSubjects"
-                    :key="subject.id"
-                    class="subject-card"
-                  >
-                    <div class="subject-info">
-                      <h5>{{ subject.name }}</h5>
-                      <p class="subject-code">{{ subject.code }}</p>
-                      <div class="subject-meta">
-                        <span class="credits">{{ subject.credits }} tín chỉ</span>
-                        <span class="students">{{ subject.studentCount }} SV</span>
-                        <span class="semester">{{ subject.semesterName }}</span>
-                      </div>
-                    </div>
-                    <div class="subject-actions">
-                      <button @click="viewSubject(subject)" class="btn-action">
-                        <i class="fas fa-eye"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div v-else class="empty-subjects">
-                  <i class="fas fa-book-open"></i>
-                  <p>Chưa có môn học nào được phân công</p>
-                </div>
-              </div>
-            </div>
+  <div class="subjects-section">
+    <div class="section-header">
+      <h4>Danh sách môn học đang giảng dạy</h4>
+      <div class="section-actions">
+        <button @click="refreshSubjects" class="btn-refresh" :disabled="isLoadingSubjects">
+          <i class="fas" :class="isLoadingSubjects ? 'fa-spinner fa-spin' : 'fa-sync'"></i>
+          {{ isLoadingSubjects ? 'Đang tải...' : 'Làm mới' }}
+        </button>
+      </div>
+    </div>
+    
+    <div v-if="isLoadingSubjects" class="loading-state">
+       <i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu môn học...
+    </div>
+
+    <div v-else-if="teacherSubjects.length > 0" class="subjects-list">
+      </div>
+    
+    <div v-else class="empty-subjects">
+      <i class="fas fa-book-open"></i>
+      <p>Chưa có môn học nào được phân công</p>
+    </div>
+  </div>
+</div>
             
             <!-- Classes Tab -->
             <div v-if="activeTab === 'classes'" class="tab-panel">
-              <div class="classes-section">
-                <div class="section-header">
-                  <h4>Danh sách lớp phụ trách</h4>
-                  <div class="section-actions">
-                    <button @click="refreshClasses" class="btn-refresh">
-                      <i class="fas fa-sync"></i>
-                      Làm mới
-                    </button>
-                  </div>
-                </div>
-                
-                <div v-if="teacherClasses.length > 0" class="classes-list">
-                  <div 
-                    v-for="classItem in teacherClasses"
-                    :key="classItem.id"
-                    class="class-card"
-                  >
-                    <div class="class-info">
-                      <h5>{{ classItem.name }}</h5>
-                      <p class="class-code">{{ classItem.code }}</p>
-                      <div class="class-meta">
-                        <span class="students">{{ classItem.studentCount }} sinh viên</span>
-                        <span class="year">Khóa {{ classItem.year }}</span>
-                      </div>
-                    </div>
-                    <div class="class-actions">
-                      <button @click="viewClass(classItem)" class="btn-action">
-                        <i class="fas fa-eye"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div v-else class="empty-classes">
-                  <i class="fas fa-users"></i>
-                  <p>Chưa có lớp nào được phân công</p>
-                </div>
-              </div>
-            </div>
+  <div class="classes-section">
+    <div class="section-header">
+      <h4>Danh sách lớp phụ trách</h4>
+      <div class="section-actions">
+        <button @click="refreshClasses" class="btn-refresh" :disabled="isLoadingClasses">
+          <i class="fas" :class="isLoadingClasses ? 'fa-spinner fa-spin' : 'fa-sync'"></i>
+          {{ isLoadingClasses ? 'Đang tải...' : 'Làm mới' }}
+        </button>
+      </div>
+    </div>
+
+    <div v-if="isLoadingClasses" class="loading-state">
+       <i class="fas fa-spinner fa-spin"></i> Đang tải danh sách lớp...
+    </div>
+    
+    <div v-else-if="teacherClasses.length > 0" class="classes-list">
+      </div>
+    
+    <div v-else class="empty-classes">
+      <i class="fas fa-users"></i>
+      <p>Chưa có lớp nào được phân công</p>
+    </div>
+  </div>
+</div>
             
             <!-- Schedule Tab -->
             <div v-if="activeTab === 'schedule'" class="tab-panel">
@@ -308,8 +277,12 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+
+// Import Services
+import courseClassService from '@/services/courseClassService'
+import officeClassService from '@/services/officeClassService'
 
 export default {
   name: 'TeacherViewModal',
@@ -326,44 +299,50 @@ export default {
   emits: ['close', 'edit'],
   setup(props, { emit }) {
     const activeTab = ref('personal')
-    // avatar fallback state
-    const _blobMap = ref(new Map())
-    const _failed = ref(new Set())
-
-    const avatarSrc = (url) => {
-      if (!url) return ''
-      return _blobMap.value.has(url) ? _blobMap.value.get(url) : url
-    }
-
-    const onAvatarError = async (ev, url) => {
-      if (!url) return
-      try {
-        if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
-          _failed.value.add(url)
-          if (ev && ev.target) ev.target.style.display = 'none'
-          return
-        }
-        if (ev && ev.target && ev.target.dataset) ev.target.dataset._fetchTried = '1'
-        const b = await fetchImageAsBlobUrl(url)
-        if (b) {
-          _blobMap.value.set(url, b)
-          if (ev && ev.target) ev.target.src = b
-          return
-        }
-      } catch (e) {
-        _failed.value.add(url)
-      }
-      try { if (ev && ev.target) ev.target.style.display = 'none' } catch (e) {}
-    }
-    const selectedWeek = ref('current')
+    
+    // State cho dữ liệu
     const teacherSubjects = ref([])
     const teacherClasses = ref([])
     const teacherSchedule = ref([])
     
+    // Loading states để UX tốt hơn
+    const isLoadingSubjects = ref(false)
+    const isLoadingClasses = ref(false)
+
+    // --- Avatar Logic (Giữ nguyên từ code cũ của bạn) ---
+    const avatarBlobMap = ref(new Map())
+    const avatarFailedSet = ref(new Set())
+    const avatarSrc = (url) => {
+      if (!url) return ''
+      return avatarBlobMap.value.has(url) ? avatarBlobMap.value.get(url) : url
+    }
+    const onAvatarError = async (ev, url) => {
+      if (!url) return
+      try {
+        if (ev?.target?.dataset?._fetchTried === '1') {
+          avatarFailedSet.value.add(url)
+          if (ev.target) ev.target.style.display = 'none'
+          return
+        }
+        if (ev?.target) ev.target.dataset._fetchTried = '1'
+        const b = await fetchImageAsBlobUrl(url)
+        if (b) {
+          avatarBlobMap.value.set(url, b)
+          if (ev.target) ev.target.src = b
+          return
+        }
+      } catch (e) {
+        avatarFailedSet.value.add(url)
+      }
+    }
+    // ----------------------------------------------------
+
+    const selectedWeek = ref('current')
+    
     const tabs = [
       { id: 'personal', name: 'Thông tin cá nhân', icon: 'fas fa-user' },
-      { id: 'subjects', name: 'Môn học', icon: 'fas fa-book-open' },
-      { id: 'classes', name: 'Lớp học', icon: 'fas fa-users' },
+      { id: 'subjects', name: 'Môn học', icon: 'fas fa-book-open' }, // Course Classes
+      { id: 'classes', name: 'Lớp chủ nhiệm', icon: 'fas fa-users' }, // Office Classes
       { id: 'schedule', name: 'Lịch giảng dạy', icon: 'fas fa-calendar' },
       { id: 'statistics', name: 'Thống kê', icon: 'fas fa-chart-bar' }
     ]
@@ -378,164 +357,164 @@ export default {
       { id: 8, name: 'Chủ nhật' }
     ]
     
-    const handleOverlayClick = () => {
-      emit('close')
-    }
-    
+    const handleOverlayClick = () => emit('close')
+
+    // --- Helpers hiển thị thông tin ---
     const getStatusName = (status) => {
-      const statuses = {
-        'active': 'Đang giảng dạy',
-        'on-break': 'Tạm nghỉ',
-        'resigned': 'Nghỉ việc'
-      }
+      const statuses = { 'active': 'Đang giảng dạy', 'on-break': 'Tạm nghỉ', 'resigned': 'Nghỉ việc' }
       return statuses[status] || status
     }
-    
     const getStatusIcon = (status) => {
-      const icons = {
-        'active': 'fas fa-check-circle',
-        'on-break': 'fas fa-pause-circle',
-        'resigned': 'fas fa-times-circle'
-      }
+      const icons = { 'active': 'fas fa-check-circle', 'on-break': 'fas fa-pause-circle', 'resigned': 'fas fa-times-circle' }
       return icons[status] || 'fas fa-question-circle'
     }
-    
-    const getDepartmentName = (department) => {
-      const departments = {
-        'cntt': 'Công nghệ thông tin',
-        'dtvt': 'Điện tử viễn thông',
-        'kt': 'Kinh tế',
-        'nn': 'Ngoại ngữ',
-        'co-khi': 'Cơ khí'
-      }
-      return departments[department] || department
-    }
-    
     const getAcademicRankName = (rank) => {
-      const ranks = {
-        'gs': 'Giáo sư',
-        'pgs': 'Phó giáo sư',
-        'ts': 'Tiến sĩ',
-        'ths': 'Thạc sĩ',
-        'ksh': 'Kỹ sư',
-        'cn': 'Cử nhân'
-      }
+      const ranks = { 'gs': 'Giáo sư', 'pgs': 'Phó giáo sư', 'ts': 'Tiến sĩ', 'ths': 'Thạc sĩ', 'ksh': 'Kỹ sư', 'cn': 'Cử nhân' }
       return ranks[rank] || rank
     }
+    const getGenderName = (gender) => ({ 'male': 'Nam', 'female': 'Nữ', 'other': 'Khác' })[gender] || gender
     
-    const getGenderName = (gender) => {
-      const genders = {
-        'male': 'Nam',
-        'female': 'Nữ',
-        'other': 'Khác'
-      }
-      return genders[gender] || gender
-    }
-
-    // Resolve a human-friendly position name for the teacher.
-    // We prefer an already-resolved `teacher.position` string, but if it's an id
-    // then try to read the nested Position object from raw payload or profile.
     const getPositionName = (t) => {
       if (!t) return '-'
       const pos = t.position
-      // if position is a string and not a numeric id, return it
       if (pos && typeof pos === 'string' && isNaN(Number(pos))) return pos
-
-      // try nested raw payloads
       const nested = t.raw?.Teacher?.Position?.position_name || t.raw?.Position?.position_name || t.teacher?.Position?.position_name || t.teacher?.position_name
       if (nested) return nested
+      return pos ? String(pos) : '-'
+    }
+    
+    const formatDate = (date) => date ? new Date(date).toLocaleDateString('vi-VN') : null
+    
+    const getScheduleByDay = (dayId) => teacherSchedule.value.filter(schedule => schedule.dayOfWeek === dayId)
 
-      // If t.position is numeric, maybe there's a mapping available elsewhere; fallback to showing id
-      if (pos) return String(pos)
-      return '-'
+    // --- FETCH DATA LOGIC ---
+
+    // 1. Fetch Subjects (Course Classes) - Môn đang dạy
+    const loadTeacherSubjects = async () => {
+      if (!props.teacher?.code) return
+      isLoadingSubjects.value = true
+      try {
+        console.log('[TeacherViewModal] loadTeacherSubjects called for teacher:', props.teacher?.code)
+        // Gọi API listCourseClasses với tham số teacher_code
+        const response = await courseClassService.listCourseClasses({
+          page: 1,
+          limit: 100, // Lấy nhiều để hiển thị
+          teacher_code: props.teacher.code, // Quan trọng: Truyền code giảng viên
+          status: 'active' // Chỉ lấy lớp đang hoạt động
+        })
+
+        // Map dữ liệu từ API sang cấu trúc UI cần
+        // Giả định response có thể trả về nhiều dạng: response.items, response.data (object) hoặc response (array)
+        const raw = response.data ?? response.items ?? response ?? []
+        const itemsList = Array.isArray(raw)
+          ? raw
+          : (Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data) ? raw.data : []))
+        console.log('[TeacherViewModal] loadTeacherSubjects response:', response)
+        console.log('[TeacherViewModal] loadTeacherSubjects itemsList length:', itemsList.length)
+
+        teacherSubjects.value = itemsList.map(item => ({
+          id: item._id || item.id,
+          name: item.course_name || item.Course?.name || 'Chưa đặt tên', // Tên môn học
+          code: item.course_code || item.Course?.code || item.code, // Mã học phần
+          credits: item.credits || item.Course?.credits || 0,
+          studentCount: item.student_count || item.total_students || 0,
+          semesterName: item.semester_name || item.Semester?.name || 'N/A'
+        }))
+        console.log('[TeacherViewModal] teacherSubjects mapped count:', teacherSubjects.value.length)
+      } catch (error) {
+        console.error('Failed to load teacher subjects:', error)
+        // Có thể thêm toast notification ở đây
+      } finally {
+        isLoadingSubjects.value = false
+      }
     }
-    
-    const formatDate = (date) => {
-      if (!date) return null
-      return new Date(date).toLocaleDateString('vi-VN')
+
+    // 2. Fetch Classes (Office Classes) - Lớp chủ nhiệm/hành chính
+    const loadTeacherClasses = async () => {
+      if (!props.teacher?.code) return
+      isLoadingClasses.value = true
+      try {
+        console.log('[TeacherViewModal] loadTeacherClasses called for teacher:', props.teacher?.code)
+        const response = await officeClassService.listOfficeClasses({
+          page: 1,
+          limit: 100,
+          teacher_code: props.teacher.code // Lọc theo giảng viên chủ nhiệm
+        })
+
+        const raw = response.data ?? response.items ?? response ?? []
+        const itemsList = Array.isArray(raw)
+          ? raw
+          : (Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data) ? raw.data : []))
+        console.log('[TeacherViewModal] loadTeacherClasses response:', response)
+        console.log('[TeacherViewModal] loadTeacherClasses itemsList length:', itemsList.length)
+
+        teacherClasses.value = itemsList.map(item => ({
+          id: item._id || item.id,
+          name: item.name,
+          code: item.code,
+          studentCount: item.student_count || item.students?.length || 0,
+          year: item.academic_year || item.year || 'N/A'
+        }))
+        console.log('[TeacherViewModal] teacherClasses mapped count:', teacherClasses.value.length)
+      } catch (error) {
+        console.error('Failed to load teacher office classes:', error)
+      } finally {
+        isLoadingClasses.value = false
+      }
     }
-    
-    const getScheduleByDay = (dayId) => {
-      return teacherSchedule.value.filter(schedule => schedule.dayOfWeek === dayId)
-    }
-    
-    const loadTeacherData = () => {
-      // Mock data - replace with actual API calls
-      teacherSubjects.value = [
-        {
-          id: 1,
-          name: 'Lập trình hướng đối tượng',
-          code: 'CS101',
-          credits: 3,
-          studentCount: 45,
-          semesterName: 'HK1 2023-2024'
-        },
-        {
-          id: 2,
-          name: 'Cơ sở dữ liệu',
-          code: 'CS102',
-          credits: 3,
-          studentCount: 38,
-          semesterName: 'HK1 2023-2024'
-        }
-      ]
-      
-      teacherClasses.value = [
-        {
-          id: 1,
-          name: 'Công nghệ thông tin K20A',
-          code: 'CNTT20A',
-          studentCount: 42,
-          year: 2020
-        }
-      ]
-      
+
+    // Mock Schedule (Giữ nguyên hoặc cần viết service riêng nếu có API lịch)
+    const loadScheduleData = () => {
+      // Logic lấy lịch nên được tách ra service riêng (VD: scheduleService)
+      // Hiện tại giữ mock để demo UI
       teacherSchedule.value = [
-        {
-          id: 1,
-          dayOfWeek: 2,
-          time: '07:00 - 09:00',
-          subjectName: 'Lập trình hướng đối tượng',
-          roomName: 'A101'
-        },
-        {
-          id: 2,
-          dayOfWeek: 4,
-          time: '13:00 - 15:00',
-          subjectName: 'Cơ sở dữ liệu',
-          roomName: 'B203'
-        }
+        { id: 1, dayOfWeek: 2, time: '07:00 - 09:00', subjectName: 'Lập trình Web', roomName: 'A101' },
       ]
     }
+
+    // --- WATCHERS ---
     
-    const refreshSubjects = () => {
-      // Reload subjects data
-      loadTeacherData()
-    }
-    
-    const refreshClasses = () => {
-      // Reload classes data
-      loadTeacherData()
-    }
-    
-    const viewSubject = (subject) => {
-      // Navigate to subject detail or open subject modal
-    }
-    
-    const viewClass = (classItem) => {
-      // Navigate to class detail or open class modal
-    }
-    
-    onMounted(() => {
-      if (props.teacher) {
-        loadTeacherData()
+    // Khi mở modal -> Reset tab về personal
+    watch(() => props.isOpen, (val) => {
+      if (val) {
+        activeTab.value = 'personal'
       }
     })
 
+    // Khi chuyển tab -> Gọi API tương ứng (Lazy load)
+    watch(activeTab, (newTab) => {
+      if (!props.teacher) return
+
+      switch (newTab) {
+        case 'subjects':
+          if (teacherSubjects.value.length === 0) loadTeacherSubjects()
+          break
+        case 'classes':
+          if (teacherClasses.value.length === 0) loadTeacherClasses()
+          break
+        case 'schedule':
+          if (teacherSchedule.value.length === 0) loadScheduleData()
+          break
+      }
+    })
+
+    // Nút refresh thủ công
+    const refreshSubjects = () => loadTeacherSubjects()
+    const refreshClasses = () => loadTeacherClasses()
+
+    // Navigation (Giữ nguyên logic cũ hoặc điều hướng thật)
+    const viewSubject = (subject) => {
+      console.log('Navigate to subject:', subject.id)
+      // router.push(...)
+    }
+    const viewClass = (classItem) => {
+      console.log('Navigate to class:', classItem.id)
+    }
+
     onBeforeUnmount(() => {
-      for (const v of _blobMap.value.values()) revokeBlobUrl(v)
-      _blobMap.value.clear()
-      _failed.value.clear()
+      for (const v of avatarBlobMap.value.values()) revokeBlobUrl(v)
+      avatarBlobMap.value.clear()
+      avatarFailedSet.value.clear()
     })
     
     return {
@@ -551,25 +530,35 @@ export default {
       onAvatarError,
       getStatusName,
       getStatusIcon,
-      getDepartmentName,
       getAcademicRankName,
-      // expose helpers and refs used by template
-      _blobMap,
-      _failed,
-      getPositionName,
       getGenderName,
+      getPositionName,
       formatDate,
       getScheduleByDay,
+      
+      // Expose actions
       refreshSubjects,
       refreshClasses,
       viewSubject,
-      viewClass
+      viewClass,
+      
+      // Helpers & Loading state
+      avatarBlobMap,
+      avatarFailedSet,
+      isLoadingSubjects,
+      isLoadingClasses
     }
   }
 }
 </script>
 
 <style scoped>
+.loading-state {
+  text-align: center;
+  padding: 40px;
+  color: #6b7280;
+  font-style: italic;
+}
 .modal-overlay {
   position: fixed;
   top: 0;

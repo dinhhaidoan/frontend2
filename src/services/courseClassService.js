@@ -8,13 +8,14 @@ if (!API_BASE_URL.includes('/api')) {
 }
 
 class CourseClassService {
-  async listCourseClasses({ page = 1, limit = 20, q = '', status = '' } = {}) {
+  async listCourseClasses({ page = 1, limit = 20, q = '', status = '',teacher_code = '' } = {}) {
     try {
       const url = new URL(`${API_BASE_URL}/share/course-classes`, window.location.origin)
       url.searchParams.set('page', page)
       url.searchParams.set('limit', limit)
       if (q) url.searchParams.set('q', q)
       if (status) url.searchParams.set('status', status)
+      if (teacher_code) url.searchParams.set('teacher_code', teacher_code)
       const res = await fetch(url.toString(), { method: 'GET', credentials: 'include', headers: { 'Content-Type': 'application/json' } })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
