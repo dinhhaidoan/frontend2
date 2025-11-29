@@ -91,7 +91,7 @@
                   :alt="student.fullName"
                   @error="onAvatarError($event, student.avatar)"
                 />
-                <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
+                <img v-else :src="'/default-avatar.svg'" :alt="student.fullName" />
                 <div>
                   <strong>{{ student.fullName }}</strong>
                   <small>{{ student.email }}</small>
@@ -143,7 +143,7 @@
             :alt="student.fullName"
             @error="onAvatarError($event, student.avatar)"
           />
-          <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
+          <img v-else :src="'/default-avatar.svg'" :alt="student.fullName" />
           <span class="status-badge" :class="student.status">
             {{ getStatusLabel(student.status) }}
           </span>

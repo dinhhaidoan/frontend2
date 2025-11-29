@@ -5,7 +5,8 @@ export const mapOfficeClass = (raw = {}) => {
   const code = raw.office_class_SKU || raw.code || raw.sku || raw.office_class?.office_class_SKU
   const name = raw.office_class_name || raw.name || raw.office_class?.office_class_name
   const maxStudents = raw.max_students || raw.maxStudents || raw.office_class?.max_students || 0
-  const studentCount = raw.student_count || raw.studentCount || raw.office_class?.student_count || 0
+
+  const studentCount = raw.student_count || raw.studentCount || students.length || 0;
   const advisorId = raw.teacher_id || raw.advisorId || raw.office_class?.teacher_id || (raw.teacher && (raw.teacher.teacher_id || raw.teacher.user_id)) || null
   const advisorName = raw.advisor_name || raw.teacher_name || raw.teacher?.teacher_name || raw.teacher?.user_name || raw.advisor?.name || raw.office_class?.advisor_name
   const major = raw.major || raw.office_class?.major || raw.office_class?.major_id
@@ -16,6 +17,21 @@ export const mapOfficeClass = (raw = {}) => {
   const AcademicYear = raw.AcademicYear || raw.academic_year || raw.office_class?.AcademicYear || null
   const academicYearName = (AcademicYear && (AcademicYear.academic_year_name || AcademicYear.name)) || raw.academic_year_name || raw.academicYearName || null
   const status = raw.status || raw.office_class?.status || 'active'
+  const rawStudents = raw.Students || raw.students || [];
+  const students = rawStudents.map(st => ({
+    id: st.student_id || st.id,
+    studentCode: st.student_code || st.user_code || 'N/A', // Ưu tiên mã sinh viên
+    fullName: st.student_name || st.name || 'N/A',
+    
+    // Logic lấy Email & Avatar từ bảng User liên kết (quan trọng)
+    email: st.User?.user_email || st.user_email || st.email || '', 
+    avatar: st.User?.user_avatar || st.avatar || '', 
+    
+    // Các trường phụ
+    gender: st.student_gender || 'Khác',
+    birthDate: st.student_birthdate,
+    status: st.student_active ? 'active' : 'inactive'
+  }));
 
   return {
     id,
@@ -23,6 +39,7 @@ export const mapOfficeClass = (raw = {}) => {
     name,
     maxStudents: Number(maxStudents || 0),
     studentCount: Number(studentCount || 0),
+    students,
     advisorId,
     advisorName,
     major,

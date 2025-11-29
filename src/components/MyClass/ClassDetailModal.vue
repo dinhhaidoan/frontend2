@@ -242,7 +242,7 @@ const close = () => {
 const blobMap = ref({})
 
 const avatarSrc = (url) => {
-  if (!url) return '/default-avatar.png'
+  if (!url) return '/default-avatar.svg'
   return blobMap.value[url] || url
 }
 

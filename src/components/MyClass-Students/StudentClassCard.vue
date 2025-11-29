@@ -132,7 +132,7 @@ const goToLessons = (classData) => {
 
 // avatar fallback helpers
 const blobMap = ref({})
-const avatarSrc = (url) => blobMap.value[url] || url || '/default-avatar.png'
+const avatarSrc = (url) => blobMap.value[url] || url || '/default-avatar.svg'
 const onAvatarError = async (event, url) => {
   try {
     if (!url || blobMap.value[url]) return

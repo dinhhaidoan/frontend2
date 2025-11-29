@@ -9,7 +9,7 @@
             :alt="student.fullName"
             @error="onAvatarError($event, student.avatar)"
           />
-          <img v-else :src="'/default-avatar.png'" :alt="student.fullName" />
+          <img v-else :src="'/default-avatar.svg'" :alt="student.fullName" />
           <div>
             <h2>{{ student.fullName }}</h2>
             <p>{{ student.studentCode }}</p>

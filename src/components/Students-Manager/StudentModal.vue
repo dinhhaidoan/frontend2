@@ -21,7 +21,7 @@
               <div class="form-group avatar-preview-col">
                 <div class="avatar-preview-small">
                   <img v-if="formData.avatarPreview" :src="formData.avatarPreview" :alt="formData.fullName || formData.studentCode || 'avatar'" @error="e => onPreviewError(e, formData.avatarPreview)" />
-                  <img v-else :src="'/default-avatar.png'" :alt="formData.fullName || formData.studentCode || 'avatar'" />
+                  <img v-else :src="'/default-avatar.svg'" :alt="formData.fullName || formData.studentCode || 'avatar'" />
                 </div>
               </div>
               <div class="form-group avatar-actions-col">

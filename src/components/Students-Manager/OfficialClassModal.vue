@@ -107,36 +107,44 @@
               />
             </div>
 
-            <div v-if="selectedStudents.length > 0" class="selected-students">
-              <div
-                v-for="student in visibleStudents"
-                :key="student.id"
-                class="student-item"
-              >
-                <div class="student-info">
-                  <span class="student-code">{{ student.studentCode }}</span>
-                  <span class="student-name">{{ student.fullName }}</span>
-                  <span v-if="student.email" class="student-email">{{ student.email }}</span>
-                </div>
-                </div>
-              <div v-if="visibleStudents.length === 0 && selectedStudents.length > 0" class="empty-search-result">
-                <p>Không tìm thấy sinh viên nào khớp với từ khóa.</p>
-              </div>
+            <div v-if="selectedStudents.length > 0" class="student-table-wrapper">
+  <table class="custom-table">
+    <thead>
+      <tr>
+        <th>Sinh viên</th> <th>Mã SV</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="student in visibleStudents" :key="student.id">
+        <td>
+            <div class="student-info-cell">
+            <img
+              v-if="student.avatarUrl && (!(_failed.has(student.avatarUrl)) || _blobMap.value.has(student.avatarUrl))"
+              :src="avatarSrc(student.avatarUrl)"
+              :alt="student.fullName"
+              @error="onAvatarError($event, student.avatarUrl)"
+              class="student-avatar-img"
+            />
+            <img
+              v-else
+              :src="getDefaultAvatar(student.fullName)"
+              :alt="student.fullName"
+              class="student-avatar-img"
+            />
+            <div class="student-text">
+              <span class="name">{{ student.fullName }}</span>
+              <small class="email">{{ student.email }}</small>
             </div>
+          </div>
+        </td>
+        <td class="code-cell">{{ student.studentCode }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
             <div v-else class="empty-students">
               <i class="fas fa-users-slash"></i>
               <p>Chưa có sinh viên nào trong lớp</p>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h3><i class="fas fa-sticky-note"></i> Ghi chú</h3>
-            <div class="form-group">
-              <textarea
-                v-model="formData.notes"
-                rows="3"
-                placeholder="Ghi chú về lớp học..."
-              ></textarea>
             </div>
           </div>
 
@@ -156,7 +164,56 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, toRefs } from 'vue'
+import { ref, computed, watch, toRefs, onMounted } from 'vue'
+import { onBeforeUnmount } from 'vue' // Đảm bảo đã import
+import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+
+const _blobMap = ref(new Map())
+const _failed = ref(new Set())
+
+const avatarSrc = (url) => {
+  if (!url) return '/default-avatar.svg' // Fallback mặc định ngay lập tức
+  if (_blobMap.value.has(url)) return _blobMap.value.get(url)
+  return url
+}
+
+const onAvatarError = async (ev, url) => {
+  if (!url) return
+  // Đánh dấu để tránh loop vô hạn
+  if (ev && ev.target && ev.target.dataset && ev.target.dataset._fetchTried === '1') {
+    _failed.value.add(url)
+    ev.target.src = '/default-avatar.svg' // Fallback cuối cùng
+    return
+  }
+  
+  if (ev && ev.target) ev.target.dataset._fetchTried = '1'
+  
+  try {
+    // Thử tải ảnh bằng fetch (có kèm credentials/token)
+    const b = await fetchImageAsBlobUrl(url)
+    if (b) {
+      _blobMap.value.set(url, b)
+      if (ev && ev.target) ev.target.src = b
+      return
+    }
+  } catch (e) {
+    _failed.value.add(url)
+  }
+  // Nếu vẫn lỗi thì về mặc định
+  if (ev && ev.target) ev.target.src = '/default-avatar.svg'
+}
+
+const getDefaultAvatar = (name) => {
+  const n = name || 'User'
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=667eea&color=fff`
+}
+
+// Dọn dẹp bộ nhớ khi tắt modal
+onBeforeUnmount(() => {
+  for (const v of _blobMap.value.values()) revokeBlobUrl(v)
+  _blobMap.value.clear()
+  _failed.value.clear()
+})
 
 const props = defineProps({
   isOpen: Boolean,
@@ -194,6 +251,9 @@ const emit = defineEmits(['close', 'submit'])
 
 // Use reactive references to props so updates from parent are reflected
 const { advisors, majors, academicYears, isView } = toRefs(props)
+// Additional hook to look up account avatars when class student entries lack avatar
+import { useUsers } from '@/hooks/useUsers'
+const { accounts, fetchUsers } = useUsers()
 const validAdvisors = computed(() => (advisors?.value || []).filter(a => (a.teacher_id || a.id)))
 
 const formData = ref({
@@ -224,12 +284,16 @@ const advisorList = ref([
 
 // Computed property to filter the DISPLAYED students based on search input
 const visibleStudents = computed(() => {
-  if (!searchStudent.value) return selectedStudents.value
-  const s = searchStudent.value.toLowerCase().trim()
-  return selectedStudents.value.filter(st => 
-    (st.studentCode || '').toLowerCase().includes(s) ||
-    (st.fullName || '').toLowerCase().includes(s) ||
-    (st.email || '').toLowerCase().includes(s)
+  const s = searchStudent.value && searchStudent.value.toString().toLowerCase().trim()
+  const mapped = (selectedStudents.value || []).map(st => ({
+    ...st,
+    avatarUrl: getStudentAvatar(st)
+  }))
+  if (!s) return mapped
+  return mapped.filter(st => 
+    (st.studentCode || '')?.toString().toLowerCase().includes(s) ||
+    (st.fullName || '')?.toString().toLowerCase().includes(s) ||
+    (st.email || '')?.toString().toLowerCase().includes(s)
   )
 })
 
@@ -335,6 +399,38 @@ const getAdvisorName = (advisorId) => {
   return mockAdvisor ? mockAdvisor.name : ''
 }
 
+// Find avatar from various shapes or fallback to accounts hook
+const getStudentAvatar = (st) => {
+  if (!st) return null
+  // 1) Common fields
+  const first = st.avatar || st.user_avatar || st.avatarUrl || st.avatar_url || (st.User && (st.User.user_avatar || st.User.avatar)) || (st.user && (st.user.user_avatar || st.user.avatar)) || st.raw?.user_avatar || st.raw?.avatar
+  if (first) return first
+  // 2) Try to find in users/accounts by matching studentCode or ID
+  try {
+    const code = (st.studentCode || st.userCode || st.user_code || st.code || st.student_code || '').toString()
+    const id = st.id || st.student_id || st.userId || st.raw?.id || null
+    const found = (accounts?.value || []).find(a => {
+      if (!a) return false
+      if (a.userId && String(a.userId) === String(code)) return true
+      if (a.id && String(a.id) === String(id)) return true
+      const raw = a.raw || {}
+      if (raw && raw.user_code && String(raw.user_code) === String(code)) return true
+      if (raw && raw.userId && String(raw.userId) === String(code)) return true
+      if (raw && raw.Student && (String(raw.Student.student_id) === String(id))) return true
+      return false
+    })
+    if (found) return found.avatar || found.user_avatar || found.raw?.user_avatar || found.raw?.avatar || (found.user && (found.user.user_avatar || found.user.avatar)) || null
+  } catch (e) {}
+  return null
+}
+
+onMounted(async () => {
+  try {
+    // Fetch accounts only if not loaded; this avoids extra network requests when students array already has avatars
+    if (!accounts.value || accounts.value.length === 0) await fetchUsers()
+  } catch (e) { /* ignore fetch errors */ }
+})
+
 const getCurrentCourseLabel = () => {
   let val = formData.value.course
   if (!val && props.officialClass) {
@@ -380,6 +476,101 @@ const close = () => {
 </script>
 
 <style scoped>
+/* Container bảng cuộn được */
+.student-table-wrapper {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.custom-table th {
+  background: #f8f9fa;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #64748b;
+  position: sticky; /* Giữ tiêu đề khi cuộn */
+  top: 0;
+  z-index: 10;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.custom-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+/* Logic hiển thị cột Avatar + Info */
+.student-info-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.student-avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.student-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-text .name {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.student-text .email {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Logic hiển thị Badge trạng thái */
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.success {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.warning {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Logic nút xóa */
+.btn-icon.delete {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.btn-icon.delete:hover {
+  background: #fee2e2;
+}
 .modal-overlay {
   position: fixed;
   top: 0;
