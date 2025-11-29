@@ -64,7 +64,6 @@
               Tín chỉ
               <i class="fas fa-sort"></i>
             </th>
-            <th>Trạng thái</th>
             <th>Thao tác</th>
           </tr>
         </thead>
@@ -106,11 +105,6 @@
             <td>Khóa: {{ student.course }}</td>
             <td>
               <span class="credits-badge">{{ student.credits }} Tín chỉ</span>
-            </td>
-            <td>
-              <span class="status-badge" :class="student.status">
-                {{ getStatusLabel(student.status) }}
-              </span>
             </td>
             <td>
               <div class="action-buttons">

@@ -57,9 +57,15 @@
 
           <div class="filter-group">
             <label><i class="fas fa-book"></i> Ngành</label>
-            <select v-model.number="filters.major">
+            <select v-model="filters.major">
               <option value="">Tất cả ngành</option>
-              <option v-for="m in majors" :key="m.major_id || m.id || m.code" :value="m.major_id || m.id || m.code">{{ m.major_name || m.name }}</option>
+              <option 
+                v-for="m in majors" 
+                :key="m.id || m.major_id" 
+                :value="m.id || m.major_id"
+              >
+                {{ m.name || m.major_name }}
+              </option>
             </select>
           </div>
 
@@ -67,23 +73,15 @@
             <label><i class="fas fa-calendar"></i> Khóa</label>
             <select v-model="filters.course">
               <option value="">Tất cả khóa</option>
-              <option value="2022">Khóa 2022</option>
-              <option value="2023">Khóa 2023</option>
-              <option value="2024">Khóa 2024</option>
-              <option value="2025">Khóa 2025</option>
+              <option 
+                v-for="y in academicYears" 
+                :key="y.id || y.academic_year_id" 
+                :value="y.id || y.academic_year_id"
+              >
+                {{ y.name || y.academic_year_name || y.code }}
+              </option>
             </select>
           </div>
-
-          <div class="filter-group">
-            <label><i class="fas fa-toggle-on"></i> Trạng thái</label>
-            <select v-model="filters.status">
-              <option value="">Tất cả</option>
-              <option value="active">Đang hoạt động</option>
-              <option value="inactive">Ngừng hoạt động</option>
-              <option value="completed">Đã tốt nghiệp</option>
-            </select>
-          </div>
-
           <button @click="resetFilters" class="btn-reset">
             <i class="fas fa-redo"></i> Đặt lại
           </button>

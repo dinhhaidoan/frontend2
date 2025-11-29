@@ -9,39 +9,6 @@
         <p>Tổng sinh viên</p>
       </div>
     </div>
-
-    <div class="stat-card studying">
-      <div class="stat-icon">
-        <i class="fas fa-user-graduate"></i>
-      </div>
-      <div class="stat-content">
-        <h3>{{ stats.studying }}</h3>
-        <p>Đang học</p>
-        <span class="percentage">{{ calculatePercentage(stats.studying) }}%</span>
-      </div>
-    </div>
-
-    <div class="stat-card reserved">
-      <div class="stat-icon">
-        <i class="fas fa-pause-circle"></i>
-      </div>
-      <div class="stat-content">
-        <h3>{{ stats.reserved }}</h3>
-        <p>Bảo lưu</p>
-        <span class="percentage">{{ calculatePercentage(stats.reserved) }}%</span>
-      </div>
-    </div>
-
-    <div class="stat-card graduated">
-      <div class="stat-icon">
-        <i class="fas fa-medal"></i>
-      </div>
-      <div class="stat-content">
-        <h3>{{ stats.graduated }}</h3>
-        <p>Tốt nghiệp</p>
-        <span class="percentage">{{ calculatePercentage(stats.graduated) }}%</span>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -68,13 +35,6 @@ const calculatePercentage = (value) => {
   return ((value / props.stats.total) * 100).toFixed(1)
 }
 
-const getGradeLabel = (gpa) => {
-  if (gpa >= 3.6) return 'Xuất sắc'
-  if (gpa >= 3.2) return 'Giỏi'
-  if (gpa >= 2.5) return 'Khá'
-  if (gpa >= 2.0) return 'Trung bình'
-  return 'Yếu'
-}
 </script>
 
 <style scoped>

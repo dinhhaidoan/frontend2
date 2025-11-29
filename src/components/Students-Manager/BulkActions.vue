@@ -10,12 +10,6 @@
         <i class="fas fa-exchange-alt"></i>
         Chuyển lớp
       </button>
-
-      <button @click="handleChangeStatus" class="btn-action change-status">
-        <i class="fas fa-edit"></i>
-        Đổi trạng thái
-      </button>
-
       <button @click="handleAssignAdvisor" class="btn-action assign-advisor">
         <i class="fas fa-user-tie"></i>
         Phân công CVHT
@@ -64,45 +58,6 @@
       <div class="modal-actions">
         <button @click="showChangeClassModal = false" class="btn-cancel">Hủy</button>
         <button @click="confirmChangeClass" class="btn-confirm">Xác nhận</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Change Status Modal -->
-  <div v-if="showChangeStatusModal" class="modal-overlay" @click.self="showChangeStatusModal = false">
-    <div class="modal-small">
-      <h3><i class="fas fa-edit"></i> Thay đổi trạng thái</h3>
-      <p>Thay đổi trạng thái của {{ selectedCount }} sinh viên</p>
-      
-      <div class="form-group">
-        <label>Trạng thái mới <span class="required">*</span></label>
-        <select v-model="newStatus" required>
-          <option value="">Chọn trạng thái</option>
-          <option value="studying">Đang học</option>
-          <option value="reserved">Bảo lưu</option>
-          <option value="suspended">Nghỉ học</option>
-          <option value="graduated">Tốt nghiệp</option>
-          <option value="expelled">Thôi học</option>
-        </select>
-      </div>
-
-      <div v-if="newStatus === 'reserved'" class="form-group">
-        <label>Thời gian bảo lưu</label>
-        <div class="date-range">
-          <input v-model="reserveStartDate" type="date" placeholder="Từ ngày" />
-          <span>đến</span>
-          <input v-model="reserveEndDate" type="date" placeholder="Đến ngày" />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Lý do</label>
-        <textarea v-model="statusReason" rows="3" placeholder="Ghi chú lý do thay đổi"></textarea>
-      </div>
-
-      <div class="modal-actions">
-        <button @click="showChangeStatusModal = false" class="btn-cancel">Hủy</button>
-        <button @click="confirmChangeStatus" class="btn-confirm">Xác nhận</button>
       </div>
     </div>
   </div>
@@ -200,26 +155,6 @@ const confirmChangeClass = () => {
 
 const handleChangeStatus = () => {
   showChangeStatusModal.value = true
-}
-
-const confirmChangeStatus = () => {
-  if (!newStatus.value) {
-    alert('Vui lòng chọn trạng thái mới')
-    return
-  }
-  
-  emit('change-status', {
-    newStatus: newStatus.value,
-    reason: statusReason.value,
-    reserveStartDate: reserveStartDate.value,
-    reserveEndDate: reserveEndDate.value
-  })
-  
-  showChangeStatusModal.value = false
-  newStatus.value = ''
-  statusReason.value = ''
-  reserveStartDate.value = ''
-  reserveEndDate.value = ''
 }
 
 const handleAssignAdvisor = () => {

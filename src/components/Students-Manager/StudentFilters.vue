@@ -46,18 +46,6 @@
         </select>
       </div>
 
-      <!-- Trạng thái học tập -->
-      <div class="filter-group">
-        <label><i class="fas fa-info-circle"></i> Trạng thái</label>
-        <select v-model="localFilters.status" @change="handleFilterChange">
-          <option value="">Tất cả trạng thái</option>
-          <option value="studying">Đang học</option>
-          <option value="reserved">Bảo lưu</option>
-          <option value="suspended">Nghỉ học</option>
-          <option value="graduated">Tốt nghiệp</option>
-          <option value="expelled">Thôi học</option>
-        </select>
-      </div>
     </div>
   </div>
 </template>

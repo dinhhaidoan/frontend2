@@ -36,7 +36,6 @@
                     <li>Mã sinh viên là bắt buộc và duy nhất</li>
                     <li>Email phải đúng định dạng</li>
                     <li>Ngày tháng theo định dạng: DD/MM/YYYY</li>
-                    <li>Trạng thái: studying, reserved, suspended, graduated</li>
                   </ul>
                 </div>
               </div>
@@ -141,7 +140,6 @@
                   <th>Họ tên</th>
                   <th>Email</th>
                   <th>Lớp</th>
-                  <th>Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,7 +220,7 @@ const errorCount = computed(() => {
 const downloadTemplate = () => {
   // Create template data
   const template = [
-    ['Mã SV', 'Họ và tên', 'Ngày sinh', 'Giới tính', 'Email', 'SĐT', 'CCCD/CMND', 'Địa chỉ', 'Ngành', 'Khóa', 'Lớp', 'Trạng thái', 'Ngày nhập học'],
+    ['Mã SV', 'Họ và tên', 'Ngày sinh', 'Giới tính', 'Email', 'SĐT', 'CCCD/CMND', 'Địa chỉ', 'Ngành', 'Khóa', 'Lớp', 'Ngày nhập học'],
     ['2251052001', 'Nguyễn Văn A', '01/01/2004', 'male', 'student@example.com', '0123456789', '001234567890', 'TP.HCM', 'IT', '2022', '22IT1', 'studying', '01/09/2022'],
     ['2251052002', 'Trần Thị B', '15/05/2004', 'female', 'student2@example.com', '0987654321', '001234567891', 'Hà Nội', 'IT', '2022', '22IT1', 'studying', '01/09/2022']
   ]

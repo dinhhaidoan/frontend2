@@ -128,13 +128,6 @@
                   <p>Khóa học</p>
                 </div>
               </div>
-              <div class="summary-card">
-                <i class="fas fa-info-circle"></i>
-                <div>
-                  <h4>{{ getStatusLabel(student.status) }}</h4>
-                  <p>Trạng thái</p>
-                </div>
-              </div>
             </div>
 
             <h3><i class="fas fa-chart-line"></i> Thành tích học tập</h3>

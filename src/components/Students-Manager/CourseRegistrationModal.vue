@@ -91,7 +91,6 @@
                   <th>Mã HP</th>
                   <th>Tên học phần</th>
                   <th>Tín chỉ</th>
-                  <th>Trạng thái</th>
                   <th>Điểm GK</th>
                   <th>Điểm CK</th>
                   <th>Tổng kết</th>

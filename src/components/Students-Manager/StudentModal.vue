@@ -156,17 +156,6 @@
                   <option v-for="cls in filteredClassList" :key="cls.id" :value="cls.id">{{ cls.code || cls.name }}</option>
                 </select>
               </div>
-
-              <div class="form-group">
-                <label>Trạng thái <span class="required">*</span></label>
-                <select v-model="formData.status" required>
-                  <option value="studying">Đang học</option>
-                  <option value="reserved">Bảo lưu</option>
-                  <option value="suspended">Nghỉ học</option>
-                  <option value="graduated">Tốt nghiệp</option>
-                  <option value="expelled">Thôi học</option>
-                </select>
-              </div>
               <div class="form-group">
                 <label>Ngày nhập học <span class="required">*</span></label>
                 <input v-model="formData.enrollmentDate" type="date" required />
@@ -242,7 +231,9 @@ import { useMajors } from '@/hooks/useMajors'
 import { useOfficeClasses } from '@/hooks/useOfficeClasses'
 import { useAcademicYears } from '@/hooks/useAcademicYears'
 import { useTeachers } from '@/hooks/useTeachers'
+import { useToast } from '@/composables/useToast'
 
+const toast = useToast()
 const props = defineProps({
   isOpen: Boolean,
   student: Object,
@@ -535,10 +526,21 @@ watch(
 // Auto-fill email when student code entered (only if email is empty)
 watch(
   () => formData.studentCode,
-  (code) => {
-    if (!code) return
-    if (!formData.email || formData.email === '') {
-      formData.email = `${code}@gmail.com`
+  (newCode, oldCode) => {
+    if (!newCode) return
+
+    // 1. Nếu email đang trống, điền luôn
+    if (!formData.email) {
+      formData.email = `${newCode}@gmail.com`
+      return
+    }
+
+    // 2. Nếu email hiện tại đang giống với format tự sinh từ mã cũ, thì cập nhật theo mã mới
+    // Ví dụ: mã cũ là "S", email là "S@gmail.com" -> Cập nhật thành "SV001@gmail.com"
+    // Nếu người dùng đã sửa tay thành "myemail@yahoo.com", dòng này sẽ bỏ qua không ghi đè.
+    const oldAutoEmail = `${oldCode || ''}@gmail.com`
+    if (formData.email === oldAutoEmail) {
+      formData.email = `${newCode}@gmail.com`
     }
   }
 )
@@ -581,41 +583,35 @@ watch(filteredClassList, (val) => {
 })
 
 const handleSubmit = () => {
-  // Only block submission when required dropdown options are absent AND the form field is empty.
-  const majorsReady = (majorsList.value && majorsList.value.length > 0) || !!formData.major
-  const yearsReady = (yearsList.value && yearsList.value.length > 0) || !!formData.course
-  const classesReady = ((classList.value && classList.value.length > 0) || (officeClasses.value && officeClasses.value.length > 0)) || !!formData.officialClass
-
-  const missing = []
-  if (!majorsReady) missing.push('Ngành')
-  if (!yearsReady) missing.push('Khóa')
-  if (!classesReady) missing.push('Lớp')
-  if (missing.length) {
-    alert(`Vui lòng chờ dữ liệu danh mục (${missing.join('/')}) tải xong trước khi lưu.`)
-    return
-  }
-  // If creating and password is provided, confirm match; else allow and backend will set default
+  // Validate password match
   if (!isEdit.value && formData.password) {
     if (formData.password !== formData.confirmPassword) {
-      alert('Mật khẩu không khớp')
+      toast.error('Mật khẩu xác nhận không khớp!') // Dùng toast thay alert
       return
     }
   }
-  // Validate parents array: each item must have name and relationship
+  
+  // Validate parents
   if (formData.parents && Array.isArray(formData.parents)) {
     for (const p of formData.parents) {
       if (!p.parent_name || !p.parent_relationship) {
-        alert('Vui lòng cung cấp họ tên và quan hệ cho tất cả phụ huynh (nếu có)')
+        toast.warning('Vui lòng cung cấp họ tên và quan hệ cho tất cả phụ huynh') // Dùng toast thay alert
         return
       }
     }
   }
-  // Validate class: ensure official class is set (client-side validation)
-  if (!formData.officialClass) {
-    alert('Vui lòng chọn lớp hành chính của sinh viên')
-    return
-  }
-  emit('submit', { ...formData, parents: formData.parents && formData.parents.length ? formData.parents.map(p => ({ parent_name: p.parent_name, parent_relationship: p.parent_relationship, parent_contact: p.parent_contact })) : undefined, avatarFile: formData.avatarFile })
+  
+  emit('submit', { 
+    ...formData, 
+    parents: formData.parents && formData.parents.length 
+      ? formData.parents.map(p => ({ 
+          parent_name: p.parent_name, 
+          parent_relationship: p.parent_relationship, 
+          parent_contact: p.parent_contact 
+        })) 
+      : undefined, 
+    avatarFile: formData.avatarFile 
+  })
 }
 
 const close = () => {
