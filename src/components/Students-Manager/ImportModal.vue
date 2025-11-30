@@ -84,36 +84,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Step 4: Options -->
-          <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-              <h3>Tùy chọn import</h3>
-              
-              <div class="options">
-                <label class="checkbox-label">
-                  <input type="checkbox" v-model="options.skipDuplicates" />
-                  <span>Bỏ qua sinh viên đã tồn tại</span>
-                </label>
-
-                <label class="checkbox-label">
-                  <input type="checkbox" v-model="options.updateExisting" />
-                  <span>Cập nhật thông tin nếu đã tồn tại</span>
-                </label>
-
-                <label class="checkbox-label">
-                  <input type="checkbox" v-model="options.sendWelcomeEmail" />
-                  <span>Gửi email chào mừng cho sinh viên mới</span>
-                </label>
-
-                <label class="checkbox-label">
-                  <input type="checkbox" v-model="options.createAccount" />
-                  <span>Tự động tạo tài khoản đăng nhập</span>
-                </label>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Preview Data -->
@@ -330,7 +300,7 @@ const close = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100000;
   padding: 20px;
 }
 

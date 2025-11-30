@@ -101,11 +101,6 @@ const menuItemsByRole = {
       icon: 'fas fa-file-alt'
     },
     {
-      id: 'schedule-students',
-      label: 'Lịch học / lịch thi',
-      icon: 'fas fa-calendar-alt'
-    },
-    {
       id: 'notes',
       label: 'Ghi chú cá nhân',
       icon: 'fas fa-sticky-note',
@@ -119,12 +114,6 @@ const menuItemsByRole = {
       id: 'ai-students',
       label: ' AI Trợ lý học tập',
       icon: 'fas fa-robot'
-    },
-    {
-      id: 'student-notifications',
-      label: ' Thông báo',
-      icon: 'fas fa-bell',
-      badge: 3
     },
     {
       id: 'settings',
@@ -155,11 +144,6 @@ const menuItemsByRole = {
       icon: 'fas fa-tasks'
     },
     {
-      id: 'teacher-schedule',
-      label: 'Lịch giảng dạy',
-      icon: 'fas fa-calendar-alt'
-    },
-    {
       id: 'notes',
       label: 'Ghi chú',
       icon: 'fas fa-sticky-note',
@@ -168,11 +152,6 @@ const menuItemsByRole = {
       id: 'code-environment',
       label: 'Môi trường code',
       icon: 'fas fa-code',
-    },
-    {
-      id: 'teacher-notifications',
-      label: 'Thông báo',
-      icon: 'fas fa-bullhorn'
     },
     {
       id: 'settings',
@@ -224,24 +203,9 @@ const menuItemsByRole = {
       icon: 'fas fa-book',
     },
     {
-      id: 'staff-schedule',
-      label: 'Xếp lịch học / thi',
-      icon: 'fas fa-calendar-week'
-    },
-    {
       id: 'staff-frameworksubject',
       label: 'Chương trình đào tạo',
       icon: 'fas fa-sitemap'
-    },
-    {
-      id: 'staff-reports',
-      label: 'Thống kê báo cáo',
-      icon: 'fas fa-chart-bar'
-    },
-    {
-      id: 'staff-notifications',
-      label: 'Thông báo',
-      icon: 'fas fa-bullhorn'
     },
     {
       id: 'settings',
@@ -270,11 +234,6 @@ const menuItemsByRole = {
       id: 'admin-notes',
       label: 'Ghi chú',
       icon: 'fas fa-sticky-note',
-    },
-    {
-      id: 'admin-notifications',
-      label: 'Quản lý thông báo',
-      icon: 'fas fa-bell'
     },
     {
       id: 'settings',

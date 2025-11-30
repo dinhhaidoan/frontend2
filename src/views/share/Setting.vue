@@ -47,10 +47,6 @@
           <div class="content-area">
             <!-- Profile Settings -->
             <ProfilePage v-if="activeMenu === 'profile'" />
-
-            <!-- Interface Settings -->
-            <InterfacePage v-else-if="activeMenu === 'interface'" />
-
             <!-- Language Settings -->
             <LanguagePage v-else-if="activeMenu === 'language'" />
 
@@ -79,7 +75,6 @@ import { ref, onMounted } from 'vue'
 
 // Import setting page components
 import ProfilePage from '@/pages/Settings/ProfilePage.vue'
-import InterfacePage from '@/pages/Settings/InterfacePage.vue'
 import LanguagePage from '@/pages/Settings/LanguagePage.vue'
 import SecurityPage from '@/pages/Settings/SecurityPage.vue'
 
@@ -93,12 +88,6 @@ const menuItems = ref([
     name: 'Hồ sơ cá nhân',
     description: 'Quản lý thông tin cá nhân và ảnh đại diện',
     icon: 'fas fa-user-circle'
-  },
-  {
-    id: 'interface',
-    name: 'Giao diện',
-    description: 'Tùy chỉnh theme và kích cỡ chữ',
-    icon: 'fas fa-palette'
   },
   {
     id: 'language',

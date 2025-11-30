@@ -15,15 +15,6 @@
       </div>
 
       <div class="filter-group">
-        <label>Loại lớp</label>
-        <select v-model="localFilters.classType" @change="emitUpdate">
-          <option value="all">Tất cả</option>
-          <option value="theory">Lý thuyết</option>
-          <option value="practice">Thực hành</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
         <label>Môn học</label>
         <select v-model="localFilters.subject" @change="emitUpdate">
           <option value="all">Tất cả</option>

@@ -75,6 +75,26 @@ class ScheduleService {
     }
   }
 
+  async autoCreateCourseSchedule(payload = {}) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/share/course-schedules/auto`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        let json = null
+        try { json = JSON.parse(text || '{}') } catch (e) { json = null }
+        const msg = (json && (json.message || json.error)) || text || `HTTP ${res.status}`
+        const err = new Error(msg)
+        err.status = res.status
+        err.details = (json && (json.errors || json)) || text
+        throw err
+      }
+      return await res.json()
+    } catch (err) {
+      console.error('ScheduleService autoCreateCourseSchedule error:', err)
+      throw err
+    }
+  }
+
   async updateCourseSchedule(id, payload = {}) {
     try {
       const res = await fetch(`${API_BASE_URL}/share/course-schedules/${encodeURIComponent(id)}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })

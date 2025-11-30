@@ -13,7 +13,6 @@
         </div>
         <!-- Right section with notification and user menu -->
         <div class="flex items-center space-x-4">
-          <NotificationBell />
           <UserMenu />
         </div>
       </div>
@@ -25,7 +24,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import Logo from '../components/Header/Logo.vue'
 import SearchBar from '../components/Header/SearchBar.vue'
-import NotificationBell from '../components/Header/NotificationBell.vue'
 import UserMenu from '../components/Header/UserMenu.vue'
 
 // Header positioning to avoid overlapping the sidebar when fixed

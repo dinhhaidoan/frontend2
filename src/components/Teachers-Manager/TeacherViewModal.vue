@@ -32,20 +32,6 @@
                 {{ getStatusName(teacher?.status) }}
               </div>
             </div>
-            <div class="quick-stats">
-              <div class="stat">
-                <span class="number">{{ teacher?.subjectCount || 0 }}</span>
-                <span class="label">Môn dạy</span>
-              </div>
-              <div class="stat">
-                <span class="number">{{ teacher?.classCount || 0 }}</span>
-                <span class="label">Lớp phụ trách</span>
-              </div>
-              <div class="stat">
-                <span class="number">{{ teacher?.studentCount || 0 }}</span>
-                <span class="label">Sinh viên</span>
-              </div>
-            </div>
           </div>
           
           <!-- Tab Navigation -->
@@ -154,43 +140,6 @@
                 </button>
               </div>
             </div>
-            
-            <!-- Schedule Tab -->
-            <div v-if="activeTab === 'schedule'" class="tab-panel">
-              <div class="schedule-section">
-                <div class="section-header">
-                  <h4>Lịch giảng dạy</h4>
-                  <div class="section-actions">
-                    <select v-model="selectedWeek" class="week-selector">
-                      <option value="current">Tuần hiện tại</option>
-                      <option value="next">Tuần sau</option>
-                      <option value="all">Toàn bộ học kỳ</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div class="schedule-grid">
-                  <div class="schedule-day" v-for="day in weekDays" :key="day.id">
-                    <h5>{{ day.name }}</h5>
-                    <div v-if="getScheduleByDay(day.id).length > 0" class="day-schedule">
-                      <div 
-                        v-for="schedule in getScheduleByDay(day.id)"
-                        :key="schedule.id"
-                        class="schedule-item"
-                      >
-                        <div class="time">{{ schedule.time }}</div>
-                        <div class="subject">{{ schedule.subjectName }}</div>
-                        <div class="room">{{ schedule.roomName }}</div>
-                      </div>
-                    </div>
-                    <div v-else class="no-schedule">
-                      <span>Không có lịch</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
             <!-- Statistics Tab -->
             <div v-if="activeTab === 'statistics'" class="tab-panel">
               <div class="statistics-section">
@@ -214,29 +163,7 @@
                       <p>Lớp phụ trách</p>
                     </div>
                   </div>
-                  
-                  <div class="stat-card">
-                    <div class="stat-icon students">
-                      <i class="fas fa-user-graduate"></i>
-                    </div>
-                    <div class="stat-info">
-                      <h4>{{ teacher?.studentCount || 0 }}</h4>
-                      <p>Tổng sinh viên</p>
-                    </div>
-                  </div>
-                  
-                  <div class="stat-card">
-                    <div class="stat-icon hours">
-                      <i class="fas fa-clock"></i>
-                    </div>
-                    <div class="stat-info">
-                      <h4>{{ teacher?.teachingHours || 0 }}</h4>
-                      <p>Giờ giảng dạy/tuần</p>
-                    </div>
-                  </div>
                 </div>
-                
-                <!-- Additional statistics can be added here -->
               </div>
             </div>
           </div>
@@ -260,6 +187,7 @@
 <script>
 import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+import useCourseSchedules from '@/hooks/useCourseSchedules'
 
 // Import Services
 import courseClassService from '@/services/courseClassService'
@@ -324,7 +252,6 @@ export default {
     const tabs = [
       { id: 'personal', name: 'Thông tin cá nhân', icon: 'fas fa-user' },
       { id: 'classes', name: 'Lớp chủ nhiệm', icon: 'fas fa-users' }, // Office Classes
-      { id: 'schedule', name: 'Lịch giảng dạy', icon: 'fas fa-calendar' },
       { id: 'statistics', name: 'Thống kê', icon: 'fas fa-chart-bar' }
     ]
     
@@ -448,13 +375,67 @@ export default {
       }
     }
 
-    // Mock Schedule (Giữ nguyên hoặc cần viết service riêng nếu có API lịch)
-    const loadScheduleData = () => {
-      // Logic lấy lịch nên được tách ra service riêng (VD: scheduleService)
-      // Hiện tại giữ mock để demo UI
-      teacherSchedule.value = [
-        { id: 1, dayOfWeek: 2, time: '07:00 - 09:00', subjectName: 'Lập trình Web', roomName: 'A101' },
-      ]
+    // Schedule loading: load from API using `useCourseSchedules` hook
+    const { schedules: scheduleFlat, fetchCourseSchedules } = useCourseSchedules()
+    const isLoadingSchedule = ref(false)
+
+    // Convert flattened schedule dayOfWeek from 0..6 (Sunday=0, Mon=1) to UI day IDs used in this component (Mon=2..Sun=8)
+    const mapFlatDayToUiDay = (day) => {
+      if (day === undefined || day === null) return null
+      const v = Number(day)
+      if (Number.isNaN(v)) return null
+      // flattenSchedules returns 0..6 with Sunday=0; convert to 2..8 (Mon=2..Sun=8)
+      if (v === 0) return 8 // Sunday
+      return v + 1 // Monday 1 -> 2, Tuesday 2 -> 3, ... Saturday 6 -> 7
+    }
+
+    const loadScheduleData = async () => {
+      if (!props.teacher) return
+      isLoadingSchedule.value = true
+      try {
+        // Query the backend for schedules - use teacher's code or name as `q` (API supports general q search)
+        const q = props.teacher.code || props.teacher.name || ''
+        // Fetch schedules (we'll fetch more items to be safe)
+        await fetchCourseSchedules({ page: 1, limit: 200, q })
+
+        // scheduleFlat is the flattened schedule list from the hook (each entry has dayOfWeek, teacherId, teacherName, etc.)
+        const allFlat = scheduleFlat.value || []
+
+        // filter schedules that belong to this teacher (match by teacherId, teacherName, or teacher code present in raw data)
+        const teacherIdStr = props.teacher.id ? String(props.teacher.id) : null
+        const teacherNameStr = props.teacher.name ? String(props.teacher.name) : null
+        const teacherCodeStr = props.teacher.code ? String(props.teacher.code) : null
+
+        const filtered = allFlat.filter(s => {
+          try {
+            if (teacherIdStr && s.teacherId) {
+              if (String(s.teacherId) === teacherIdStr) return true
+            }
+            if (teacherNameStr && s.teacherName) {
+              if (String(s.teacherName) === teacherNameStr) return true
+            }
+            // check raw payload for teacher code
+            const rawTeacherCode = s.raw?.teacher_code || s.raw?.Teacher?.teacher_code || s.raw?.CourseClass?.teacher_code || s.raw?.CourseClass?.teacherCode || null
+            if (teacherCodeStr && rawTeacherCode && String(rawTeacherCode) === teacherCodeStr) return true
+            return false
+          } catch (e) {
+            return false
+          }
+        })
+
+        // Map to UI-friendly structure used in the template
+        teacherSchedule.value = filtered.map(f => ({
+          id: f.id || `${f.scheduleId}-${f.dayOfWeek}-${f.slotNumber}`,
+          dayOfWeek: mapFlatDayToUiDay(f.dayOfWeek),
+          time: (f.timeSlot || (f.startTime && f.endTime ? `${f.startTime} - ${f.endTime}` : null)) || '',
+          subjectName: f.subjectName || f.groupName || f.courseClassName || '',
+          roomName: f.roomName || ''
+        }))
+      } catch (err) {
+        console.error('Failed to load teacher schedule:', err)
+      } finally {
+        isLoadingSchedule.value = false
+      }
     }
 
     // --- WATCHERS ---
@@ -486,6 +467,7 @@ export default {
     // Nút refresh thủ công
     const refreshSubjects = () => loadTeacherSubjects()
     const refreshClasses = () => loadTeacherClasses()
+    const refreshSchedule = () => loadScheduleData()
 
     // Navigation (Giữ nguyên logic cũ hoặc điều hướng thật)
     const viewSubject = (subject) => {
@@ -503,6 +485,8 @@ export default {
     })
     
     return {
+        isLoadingSchedule,
+        refreshSchedule,
       activeTab,
       selectedWeek,
       teacherSubjects,

@@ -126,35 +126,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Lịch học -->
-            <div v-if="activeTab === 'schedule'" class="tab-panel">
-              <div class="schedule-list">
-                <div 
-                  v-for="schedule in mockSchedules" 
-                  :key="schedule.id"
-                  class="schedule-item"
-                >
-                  <div class="schedule-date">
-                    <div class="day">{{ schedule.day }}</div>
-                    <div class="month">Th{{ schedule.month }}</div>
-                  </div>
-                  <div class="schedule-info">
-                    <div class="schedule-time">
-                      <i class="fas fa-clock"></i>
-                      {{ schedule.time }}
-                    </div>
-                    <div class="schedule-room">
-                      <i class="fas fa-door-open"></i>
-                      Phòng {{ schedule.room }}
-                    </div>
-                  </div>
-                  <span :class="['schedule-status', schedule.status]">
-                    {{ getScheduleStatus(schedule.status) }}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -188,7 +159,6 @@ const searchQuery = ref('')
 const tabs = [
   { id: 'overview', label: 'Tổng quan', icon: 'fas fa-info-circle' },
   { id: 'students', label: 'Sinh viên', icon: 'fas fa-users' },
-  { id: 'schedule', label: 'Lịch học', icon: 'fas fa-calendar-alt' }
 ]
 
 const mockStudents = [
@@ -273,7 +243,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100000;
   padding: 20px;
 }
 

@@ -139,50 +139,6 @@
               <i class="fas fa-plus"></i>
               Tạo thông báo
             </button>
-            <button 
-              class="quick-action-btn" 
-              v-if="canManageTemplates"
-              @click="openTemplatesModal"
-            >
-              <i class="fas fa-file-alt"></i>
-              Mẫu thông báo
-            </button>
-            <button 
-              class="quick-action-btn" 
-              v-if="canSchedule"
-              @click="openScheduleModal"
-            >
-              <i class="fas fa-clock"></i>
-              Lên lịch
-            </button>
-            <button 
-              class="quick-action-btn" 
-              v-if="canSeeAnalytics"
-              @click="openAnalyticsModal"
-            >
-              <i class="fas fa-chart-bar"></i>
-              Thống kê
-            </button>
-          </div>
-        </div>
-
-        <!-- Recent Activity (Admin/Staff) -->
-        <div class="sidebar-section" v-if="canSeeActivity">
-          <h3>Hoạt động gần đây</h3>
-          <div class="recent-activity">
-            <div 
-              v-for="activity in recentActivities" 
-              :key="activity.id"
-              class="activity-item"
-            >
-              <div class="activity-icon" :class="activity.type">
-                <i :class="activity.icon"></i>
-              </div>
-              <div class="activity-content">
-                <span class="activity-text">{{ activity.text }}</span>
-                <span class="activity-time">{{ activity.time }}</span>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* Global buttons and small utilities used across components */
+.btn-primary { background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; }
+.btn-primary:hover { background: #2563eb; }
+.btn-outline { border: 1px solid #d1d5db; padding: 8px 12px; border-radius: 8px; background: transparent; color: #374151; }
+.btn-outline:hover { background: #f3f4f6; }
+.btn-cancel { background: #f3f4f6; border: 1px solid #d1d5db; padding: 8px 12px; border-radius: 8px; color: #374151; }
+.btn-cancel:hover { background: #eef2f6; }
+
+/* Small utility for card like boxes */
+.card { background: white; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.06); padding: 16px; }
+
+/* small form helpers */
+.form-group { display:flex; flex-direction:column; gap:6px; }
+.grid-2 { display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; }
+.schedule-table th { font-weight: 600; color: #0f172a; }
+.schedule-table td { color: #0f172a; }
+.schedule-table { border-spacing:0; }
+.full-width { grid-column: 1 / -1 }
+.weekdays .weekday { display:inline-flex; align-items:center; gap:6px; margin-right:8px }
+.slots-grid { display:flex; flex-wrap:wrap; gap:8px }
+.slot-item { display:flex; align-items:center; gap:8px }
+
+/* Inputs & selects styling for consistent appearance */
+input[type="text"], input[type="number"], input[type="date"], select, textarea {
+	padding: 8px;
+	border: 1px solid #d1d5db;
+	border-radius: 6px;
+	background: white;
+	color: #0f172a;
+}
+input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.08); border-color: #3b82f6 }
