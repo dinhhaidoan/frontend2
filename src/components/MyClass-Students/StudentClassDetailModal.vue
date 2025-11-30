@@ -54,15 +54,7 @@
                   </div>
                 </div>
 
-                <div class="info-card">
-                  <div class="info-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                    <i class="fas fa-door-open"></i>
-                  </div>
-                  <div class="info-content">
-                    <div class="info-label">Phòng học</div>
-                    <div class="info-value">{{ classData.room }}</div>
-                  </div>
-                </div>
+                <!-- Room info removed per UX request -->
 
                 <div class="info-card">
                   <div class="info-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
@@ -148,10 +140,7 @@
                       <i class="fas fa-clock"></i>
                       {{ schedule.time }}
                     </div>
-                    <div class="schedule-room">
-                      <i class="fas fa-door-open"></i>
-                      Phòng {{ schedule.room }}
-                    </div>
+                    <!-- Room info inside schedule removed per UX request -->
                   </div>
                   <span :class="['schedule-status', schedule.status]">
                     {{ getScheduleStatus(schedule.status) }}

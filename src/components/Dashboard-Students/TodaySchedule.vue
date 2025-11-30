@@ -42,10 +42,7 @@
               <i class="fas fa-chalkboard-teacher"></i>
               {{ classItem.teacher }}
             </span>
-            <span class="detail-item">
-              <i class="fas fa-door-open"></i>
-              {{ classItem.room }}
-            </span>
+            <!-- Room display removed per UX request -->
           </div>
         </div>
         <button 

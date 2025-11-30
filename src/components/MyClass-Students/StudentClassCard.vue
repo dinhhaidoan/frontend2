@@ -26,10 +26,7 @@
           <i class="fas fa-calendar-alt"></i>
           <span>{{ classData.schedule }}</span>
         </div>
-        <div class="info-item">
-          <i class="fas fa-door-open"></i>
-          <span>Phòng {{ classData.room }}</span>
-        </div>
+        <!-- Room display removed per UX request -->
         <div class="info-item">
           <i class="fas fa-users"></i>
           <span>{{ classData.studentCount }} sinh viên</span>

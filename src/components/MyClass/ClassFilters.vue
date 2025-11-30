@@ -8,23 +8,16 @@
         <label>Học kỳ</label>
         <select v-model="localFilters.semester" @change="emitUpdate">
           <option value="all">Tất cả</option>
-          <option value="1-2024">HK1 2024-2025</option>
-          <option value="2-2024">HK2 2024-2025</option>
-          <option value="1-2025">HK1 2025-2026</option>
+          <option v-if="semestersLoading" disabled>Đang tải...</option>
+          <option
+            v-for="s in semesters"
+            :key="s.id || s.name"
+            :value="s.name || (s.id && String(s.id))"
+          >
+            {{ s.name || (s.id && String(s.id)) }}
+          </option>
         </select>
       </div>
-
-      <div class="filter-group">
-        <label>Môn học</label>
-        <select v-model="localFilters.subject" @change="emitUpdate">
-          <option value="all">Tất cả</option>
-          <option value="web">Lập trình Web</option>
-          <option value="mobile">Lập trình Mobile</option>
-          <option value="database">Cơ sở dữ liệu</option>
-          <option value="network">Mạng máy tính</option>
-        </select>
-      </div>
-
       <div class="filter-group">
         <label>Trạng thái</label>
         <select v-model="localFilters.status" @change="emitUpdate">
@@ -44,7 +37,9 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
+import { useSemesters } from '@/hooks/useSemesters'
+import { useCourses } from '@/hooks/useCourses'
 
 const props = defineProps({
   filters: {
@@ -56,6 +51,22 @@ const props = defineProps({
 const emit = defineEmits(['update'])
 
 const localFilters = ref({ ...props.filters })
+
+// Load semester & subject lists from API
+const { semesters, fetchSemesters, loading: semestersLoading } = useSemesters()
+const { courses, fetchCourses, loading: coursesLoading } = useCourses()
+
+onMounted(async () => {
+  // Load a larger page to fetch all courses/semesters for filter dropdowns
+  try {
+    await Promise.all([
+      fetchSemesters({ page: 1, limit: 100 }),
+      fetchCourses({ page: 1, limit: 200 })
+    ])
+  } catch (err) {
+    // fetch errors are handled inside hooks via toasts — nothing special to do here
+  }
+})
 
 watch(() => props.filters, (newFilters) => {
   localFilters.value = { ...newFilters }

@@ -29,15 +29,6 @@
             <!-- Tổng quan -->
             <div v-if="activeTab === 'overview'" class="tab-panel">
               <div class="overview-grid">
-                <div class="info-card">
-                  <div class="info-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
-                    <i class="fas fa-users"></i>
-                  </div>
-                  <div class="info-content">
-                    <div class="info-value">{{ classData.studentCount }}</div>
-                    <div class="info-label">Sinh viên</div>
-                  </div>
-                </div>
 
                 <div class="info-card">
                   <div class="info-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
@@ -49,25 +40,7 @@
                   </div>
                 </div>
 
-                <div class="info-card">
-                  <div class="info-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                    <i class="fas fa-user-check"></i>
-                  </div>
-                  <div class="info-content">
-                    <div class="info-value">{{ classData.attendance }}%</div>
-                    <div class="info-label">Điểm danh</div>
-                  </div>
-                </div>
-
-                <div class="info-card">
-                  <div class="info-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
-                    <i class="fas fa-door-open"></i>
-                  </div>
-                  <div class="info-content">
-                    <div class="info-value">{{ classData.room }}</div>
-                    <div class="info-label">Phòng học</div>
-                  </div>
-                </div>
+                <!-- Room info removed per UX request -->
               </div>
 
               <div class="detail-section">
@@ -75,7 +48,7 @@
                 <div class="detail-grid">
                   <div class="detail-item">
                     <span class="detail-label">Môn học:</span>
-                    <span class="detail-value">{{ classData.subject }}</span>
+                    <span v-if="classData" class="detail-value">{{ classData.name }}</span>
                   </div>
                   <div class="detail-item">
                     <span class="detail-label">Loại lớp:</span>
@@ -89,38 +62,6 @@
                     <span class="detail-label">Trạng thái:</span>
                     <span :class="['badge', classData.status]">
                       {{ getStatusLabel(classData.status) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Danh sách sinh viên -->
-            <div v-if="activeTab === 'students'" class="tab-panel">
-              <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input 
-                  v-model="searchQuery" 
-                  type="text" 
-                  placeholder="Tìm kiếm sinh viên..."
-                >
-              </div>
-
-              <div class="student-list">
-                <div 
-                  v-for="student in filteredStudents" 
-                  :key="student.id"
-                  class="student-item"
-                >
-                  <img :src="avatarSrc(student.avatar)" :alt="student.name" class="student-avatar" @error="onAvatarError($event, student.avatar)">
-                  <div class="student-info">
-                    <div class="student-name">{{ student.name }}</div>
-                    <div class="student-code">{{ student.code }}</div>
-                  </div>
-                  <div class="student-stats">
-                    <span class="stat">
-                      <i class="fas fa-user-check"></i>
-                      {{ student.attendance }}%
                     </span>
                   </div>
                 </div>
@@ -141,8 +82,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onBeforeUnmount } from 'vue'
-import { fetchImageAsBlobUrl, revokeBlobUrl } from '@/composables/useAvatarLoader'
+import { ref, computed, onBeforeUnmount, toRef } from 'vue'
 
 const props = defineProps({
   classData: {
@@ -150,41 +90,16 @@ const props = defineProps({
     default: null
   }
 })
-
+const classData = toRef(props, 'classData')
 const emit = defineEmits(['close'])
 
 const activeTab = ref('overview')
-const searchQuery = ref('')
 
 const tabs = [
   { id: 'overview', label: 'Tổng quan', icon: 'fas fa-info-circle' },
-  { id: 'students', label: 'Sinh viên', icon: 'fas fa-users' },
 ]
 
-const mockStudents = [
-  { id: 1, name: 'Nguyễn Văn A', code: 'SV001', avatar: 'https://i.pravatar.cc/150?img=1', attendance: 95 },
-  { id: 2, name: 'Trần Thị B', code: 'SV002', avatar: 'https://i.pravatar.cc/150?img=2', attendance: 88 },
-  { id: 3, name: 'Lê Văn C', code: 'SV003', avatar: 'https://i.pravatar.cc/150?img=3', attendance: 92 },
-  { id: 4, name: 'Phạm Thị D', code: 'SV004', avatar: 'https://i.pravatar.cc/150?img=4', attendance: 85 },
-  { id: 5, name: 'Hoàng Văn E', code: 'SV005', avatar: 'https://i.pravatar.cc/150?img=5', attendance: 90 }
-]
-
-const mockSchedules = [
-  { id: 1, day: 28, month: 10, time: '07:30 - 09:30', room: 'A101', status: 'upcoming' },
-  { id: 2, day: 21, month: 10, time: '07:30 - 09:30', room: 'A101', status: 'completed' },
-  { id: 3, day: 14, month: 10, time: '07:30 - 09:30', room: 'A101', status: 'completed' },
-  { id: 4, day: 7, month: 10, time: '07:30 - 09:30', room: 'A101', status: 'completed' }
-]
-
-const filteredStudents = computed(() => {
-  if (!searchQuery.value) return mockStudents
-
-  const query = searchQuery.value.toLowerCase()
-  return mockStudents.filter(s => 
-    s.name.toLowerCase().includes(query) ||
-    s.code.toLowerCase().includes(query)
-  )
-})
+// No students / schedules fetched for this modal — overview-only
 
 const getStatusLabel = (status) => {
   const labels = {
@@ -208,28 +123,23 @@ const close = () => {
   emit('close')
 }
 
-// avatar fallback helpers
-const blobMap = ref({})
-
-const avatarSrc = (url) => {
-  if (!url) return '/default-avatar.svg'
-  return blobMap.value[url] || url
-}
-
-const onAvatarError = async (event, url) => {
-  try {
-    if (!url || blobMap.value[url]) return
-    const b = await fetchImageAsBlobUrl(url)
-    blobMap.value[url] = b
-    event.target.src = b
-  } catch (err) {
-    console.debug('avatar fetch fallback failed', err)
-  }
-}
-
-onBeforeUnmount(() => {
-  Object.values(blobMap.value).forEach(v => revokeBlobUrl(v))
+// Computed fallbacks for display fields to handle different server shapes
+const displaySubject = computed(() => {
+  const d = classData.value
+  if (!d) return 'Chưa rõ'
+  return (
+    d.subject ||
+    d.subject_name ||
+    (d.subject && d.subject.name) ||
+    (d.raw && (d.raw.course_name || (d.raw.Course && d.raw.Course.name))) ||
+    d.courseName ||
+    d.course?.name ||
+    'Chưa rõ'
+  )
 })
+
+
+// No avatar handling — students are not loaded in this modal
 </script>
 
 <style scoped>

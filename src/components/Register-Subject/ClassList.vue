@@ -53,7 +53,7 @@
           </div>
           <div class="info-row">
             <i class="fas fa-map-marker-alt"></i>
-            <span>Phòng: <strong>{{ classItem.room }}</strong></span>
+            <!-- Room display removed per UX request -->
           </div>
           <div class="info-row">
             <i class="fas fa-users"></i>

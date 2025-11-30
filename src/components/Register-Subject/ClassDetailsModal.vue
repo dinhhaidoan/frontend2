@@ -55,8 +55,7 @@
                   <span class="value">{{ classData.teacherEmail || 'N/A' }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="label">Phòng học:</span>
-                  <span class="value">{{ classData.room }}</span>
+                  <!-- Room display removed per UX request -->
                 </div>
                 <div class="info-item">
                   <span class="label">Sĩ số:</span>

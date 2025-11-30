@@ -45,7 +45,7 @@
           </div>
           <div class="detail-row">
             <i class="fas fa-map-marker-alt"></i>
-            <span>Phòng {{ item.room }}</span>
+            <!-- Room display removed per UX request -->
           </div>
           <div class="detail-row">
             <i class="fas fa-clock"></i>

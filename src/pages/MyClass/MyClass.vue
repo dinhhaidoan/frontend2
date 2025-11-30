@@ -16,19 +16,21 @@
             Lớp học phụ trách
           </h2>
           <div class="header-actions">
-            <button @click="refreshClasses" class="btn-action">
-              <i class="fas fa-sync-alt"></i>
-              Làm mới
-            </button>
-            <button @click="exportClasses" class="btn-action primary">
-              <i class="fas fa-download"></i>
-              Xuất danh sách
+            <button @click="refreshClasses" class="btn-action" :disabled="loading">
+              <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+              {{ loading ? 'Đang tải...' : 'Làm mới' }}
             </button>
           </div>
         </div>
 
+        <div v-if="loading" class="loading-state" style="text-align: center; padding: 40px;">
+           <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #3b82f6;"></i>
+           <p style="margin-top: 10px; color: #6b7280;">Đang tải dữ liệu lớp học...</p>
+        </div>
+
         <ClassGridView 
-          :classes="mockClasses" 
+          v-else
+          :classes="mappedClasses" 
           :filters="filters"
           @class-click="openClassDetail"
         />
@@ -44,21 +46,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCourseClasses } from '@/hooks/useCourseClasses' // Import Hook lấy dữ liệu thật
+import { useSemesters } from '@/hooks/useSemesters'
 import ClassStats from '@/components/MyClass/ClassStats.vue'
 import ClassFilters from '@/components/MyClass/ClassFilters.vue'
 import ClassGridView from '@/components/MyClass/ClassGridView.vue'
 import ClassDetailModal from '@/components/MyClass/ClassDetailModal.vue'
 
-const stats = ref({
-  totalClasses: 6,
-  totalStudents: 245,
-  totalSessions: 45,
-  avgAttendance: 92,
-  pendingGrades: 8,
-  avgGrade: 7.5
-})
+// 1. Khởi tạo Hook
+const { 
+  courseClasses, // Dữ liệu lớp học từ API (đã là computed ref)
+  loading, 
+  fetchCourseClasses,
+  total, // Tổng số lớp (để tính stats tạm thời)
+  // getCourseClass (no longer used to fetch students on modal open)
+} = useCourseClasses()
 
+// Semesters list for mapping semester name display
+const { semesters, fetchSemesters, loading: semestersLoading } = useSemesters()
+
+// 2. State quản lý Filters & Modal
 const filters = ref({
   semester: 'all',
   classType: 'all',
@@ -69,109 +77,98 @@ const filters = ref({
 const showClassModal = ref(false)
 const selectedClass = ref(null)
 
-// Mock data
-const mockClasses = ref([
-  {
-    id: 1,
-    name: 'Lập trình Web nâng cao',
-    code: 'WEB301',
-    subject: 'Lập trình Web',
-    subjectCode: 'web',
-    type: 'theory',
-    semester: 'HK1 2024-2025',
-    studentCount: 45,
-    room: 'A101',
-    attendance: 95,
-    status: 'active'
-  },
-  {
-    id: 2,
-    name: 'Thực hành Lập trình Web',
-    code: 'WEB301.1',
-    subject: 'Lập trình Web',
-    subjectCode: 'web',
-    type: 'practice',
-    semester: 'HK1 2024-2025',
-    studentCount: 45,
-    room: 'LAB1',
-    attendance: 92,
-    status: 'active'
-  },
-  {
-    id: 3,
-    name: 'Lập trình Mobile Android',
-    code: 'MOB201',
-    subject: 'Lập trình Mobile',
-    subjectCode: 'mobile',
-    type: 'theory',
-    semester: 'HK1 2024-2025',
-    studentCount: 38,
-    room: 'B202',
-    attendance: 88,
-    status: 'active'
-  },
-  {
-    id: 4,
-    name: 'Cơ sở dữ liệu nâng cao',
-    code: 'DB301',
-    subject: 'Cơ sở dữ liệu',
-    subjectCode: 'database',
-    type: 'theory',
-    semester: 'HK1 2024-2025',
-    studentCount: 42,
-    room: 'C103',
-    attendance: 90,
-    status: 'active'
-  },
-  {
-    id: 5,
-    name: 'Mạng máy tính',
-    code: 'NET201',
-    subject: 'Mạng máy tính',
-    subjectCode: 'network',
-    type: 'theory',
-    semester: 'HK2 2024-2025',
-    studentCount: 40,
-    room: 'A205',
-    attendance: 85,
-    status: 'upcoming'
-  },
-  {
-    id: 6,
-    name: 'Thực hành Mạng',
-    code: 'NET201.1',
-    subject: 'Mạng máy tính',
-    subjectCode: 'network',
-    type: 'practice',
-    semester: 'HK1 2024-2025',
-    studentCount: 35,
-    room: 'LAB3',
-    attendance: 78,
-    status: 'completed'
-  }
-])
+// 3. Mapping Data (Quan trọng)
+// Chuyển đổi dữ liệu từ API sang format mà ClassGridView đang dùng
+const mappedClasses = computed(() => {
+  // Create a quick map of id->name from semesters to resolve semester display
+  const semMap = (semesters && semesters.value) ? semesters.value.reduce((acc, s) => {
+    if (s && s.id) acc[String(s.id)] = s.name || s.title || s.semester_name || s.name
+    if (s && s.name) acc[s.name] = s.name
+    return acc
+  }, {}) : {}
 
-const updateFilters = (newFilters) => {
-  filters.value = { ...filters.value, ...newFilters }
+  return courseClasses.value.map(item => ({
+    id: item.id || item._id, // Fallback nếu ID khác nhau
+    name: item.name,
+    code: item.code,
+    // API có thể trả về object subject hoặc string, cần xử lý an toàn
+    subject: item.subject?.name || item.subject_name || 'Chưa cập nhật', 
+    subjectCode: item.subject?.code || 'general',
+    // Giả định logic mapping cho type (Lý thuyết/Thực hành) dựa trên tên hoặc trường type từ API
+    type: item.type || (item.name.toLowerCase().includes('thực hành') ? 'practice' : 'theory'),
+    // Resolve semester label: prefer an actual Semester name if we have semesterId
+    semester: item.semester?.name || item.semester || semMap[String(item.semesterId)] || item.raw?.semester?.semester_name || 'Chưa cập nhật', // Fallback nếu chưa có semester real
+    studentCount: item.student_count || item.max_students || 0,
+    // room removed per UX request
+    attendance: item.attendance_rate || 0, // Giả định trường này từ API
+    status: mapStatus(item.status) // Hàm helper map status bên dưới
+  }))
+})
+
+// Helper để map status từ API (ví dụ: 'opened', 'closed') sang status của UI ('active', 'completed')
+const mapStatus = (apiStatus) => {
+  const map = {
+    'opened': 'active',
+    'active': 'active',
+    'closed': 'completed',
+    'completed': 'completed',
+    'upcoming': 'upcoming'
+  }
+  return map[apiStatus] || 'active'
 }
 
-const refreshClasses = () => {
-  console.log('Refreshing classes...')
+// 4. Stats (Tạm thời tính toán dựa trên dữ liệu tải về hoặc số liệu ảo)
+// Lý tưởng nhất là có 1 API riêng cho thống kê: /api/course-classes/stats
+const stats = computed(() => ({
+  totalClasses: total.value || mappedClasses.value.length,
+  totalStudents: mappedClasses.value.reduce((sum, item) => sum + (item.studentCount || 0), 0),
+  totalSessions: 45, // Placeholder
+  avgAttendance: 92, // Placeholder
+  pendingGrades: 0,
+  avgGrade: 0
+}))
+
+// 5. Actions
+const updateFilters = (newFilters) => {
+  filters.value = { ...filters.value, ...newFilters }
+  // Nếu muốn filter server-side thì gọi fetch lại ở đây:
+  // fetchCourseClasses({ ...filters.value })
+}
+
+const refreshClasses = async () => {
+  await fetchCourseClasses({ 
+    page: 1, 
+    limit: 100 // Tải nhiều để filter client-side tạm thời
+  })
 }
 
 const exportClasses = () => {
-  console.log('Exporting classes...')
+  console.log('Exporting classes...', mappedClasses.value)
 }
 
-const openClassDetail = (classData) => {
-  selectedClass.value = classData
-  showClassModal.value = true
+const openClassDetail = async (classData) => {
+  // Hiển thị dữ liệu cơ bản trước để UI phản hồi nhanh
+  selectedClass.value = { 
+    ...classData, 
+    students: [] // Reset danh sách sinh viên trong khi chờ tải
+  } 
+    showClassModal.value = true
 }
 
 const closeClassModal = () => {
   showClassModal.value = false
   selectedClass.value = null
 }
+
+// 6. Lifecycle
+onMounted(() => {
+  (async () => {
+    await Promise.all([
+      refreshClasses(),
+      fetchSemesters({ page: 1, limit: 100 })
+    ])
+  })()
+})
 </script>
 
 <style scoped>

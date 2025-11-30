@@ -14,7 +14,7 @@
       >
         <div class="card-header">
           <div class="class-info">
-            <h3 class="class-name">{{ classItem.name }}</h3>
+            <h3  class="class-name">{{ classItem.name }}</h3>
             <span class="class-code">{{ classItem.code }}</span>
           </div>
           <span :class="['status-badge', classItem.status]">
@@ -25,39 +25,17 @@
         <div class="card-body">
           <div class="info-row">
             <i class="fas fa-book"></i>
-            <span>{{ classItem.subject }}</span>
+            <span>{{ classItem.name }}</span>
           </div>
           <div class="info-row">
             <i class="fas fa-layer-group"></i>
             <span>{{ classItem.type === 'theory' ? 'Lý thuyết' : 'Thực hành' }}</span>
           </div>
           <div class="info-row">
-            <i class="fas fa-users"></i>
-            <span>{{ classItem.studentCount }} sinh viên</span>
-          </div>
-          <div class="info-row">
             <i class="fas fa-calendar-alt"></i>
             <span>{{ classItem.semester }}</span>
           </div>
-          <div class="info-row">
-            <i class="fas fa-door-open"></i>
-            <span>Phòng {{ classItem.room }}</span>
-          </div>
-        </div>
-
-        <div class="card-footer">
-          <div class="progress-info">
-            <div class="progress-label">
-              <span>Điểm danh</span>
-              <span class="progress-value">{{ classItem.attendance }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill"
-                :style="{ width: classItem.attendance + '%' }"
-              ></div>
-            </div>
-          </div>
+          <!-- Room info removed per UX request -->
         </div>
 
         <div class="card-actions">
